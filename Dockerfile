@@ -11,6 +11,8 @@ RUN npm install
 # Copy the rest of the application files
 COPY . .
 
+ENV PORT=3000
+
 # Build TypeScript
 RUN npm run build
 
