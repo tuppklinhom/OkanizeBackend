@@ -12,7 +12,11 @@ RUN npm install
 COPY . .
 
 ENV PORT=3000
-
+ENV DATABASE_HOST=db
+ENV DATABASE_PORT=5432
+ENV DATABASE_USER=okanize
+ENV DATABASE_PASSWORD=okanizeIsCool
+ENV DATABASE_NAME=okanize_db
 # Build TypeScript
 RUN npm run build
 
