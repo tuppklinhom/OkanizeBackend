@@ -1,10 +1,12 @@
 import express from 'express';
+import 'dotenv/config';
 import { app } from './app';
 import { sequelize } from './database';
 import { User } from './model/User';
 const PORT = parseInt(process.env.PORT || '3000');
 
-async function main(){sequelize.authenticate()
+async function main(){
+  sequelize.authenticate()
   .then(() => console.log('Database connection established'))
   .catch((err: Error) => console.error('Unable to connect to the database:', err));
   
