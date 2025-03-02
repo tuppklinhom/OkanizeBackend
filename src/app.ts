@@ -1,7 +1,12 @@
-import express, { Request, Response, NextFunction, urlencoded, json } from 'express'
+import express, { json } from 'express'
+import bodyParser from "body-parser";
+import ocrRouter from './route/ocr'
+
 export const app = express();
 
 app.use(json())
+app.use(bodyParser.json({ limit: "10mb" })); // Support JSON body with base64 images
+app.use(bodyParser.urlencoded({ extended: true }));
 
 app.get('/health', (req, res) => {
     res.status(200).json({
@@ -10,6 +15,8 @@ app.get('/health', (req, res) => {
     })
 })
 
+
+app.use('/api/ocr', ocrRouter)
 
 
 app.use('*', (req, res, next) => {
