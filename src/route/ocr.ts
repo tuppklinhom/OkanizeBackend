@@ -27,11 +27,16 @@ const extractStoreName = (text: string): string | undefined => {
 };
 
 const extractAmount = (text: string): string | undefined => {
-    const amountRegex = /(?:TOTAL|Total|Sub Total|AMOUNT|Amount|Balance|Due|Grand Total|รวม|ยอดรวม|ยอดสุทธิ|สุทธิ)\s*[:฿]?\s*([\d,๐-๙]+(?:\.\d{2})?)/i;
-    const amountMatch = text.match(amountRegex);
-    if (amountMatch) {
-      return convertThaiNumbers(amountMatch[1]);
-    }
+    const amountRegex = /(?:TOTAL|Total|Sub Total|AMOUNT|Amount|Balance|Due|Grand Total|ยอดสุทธิ|ยอดชำระสุทธิ|สุทธิ|ยอดรวม|รวม|ทั้งหมด|จำนวน|จำนวนเงิน)\s*[:฿]?\s*([\d,๐-๙]+(?:\.\d{2})?)/i;
+    const lines = text.split("\n").map(line => line.trim()).filter(line => line !== "");
+  
+  // Iterate from bottom (last line) to top (first line)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const match = lines[i].match(amountRegex);
+      if (match && match[1]) {
+        return convertThaiNumbers(match[1]); // Return the captured total amount
+      }
+    } 
     return undefined;
 };
 
