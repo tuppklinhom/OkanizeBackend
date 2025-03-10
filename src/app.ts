@@ -1,6 +1,8 @@
 import express, { json } from 'express'
 import bodyParser from "body-parser";
 import ocrRouter from './route/ocr'
+import groupRouter from './route/group'
+import transactionRouter from './route/transaction'
 
 export const app = express();
 
@@ -17,7 +19,8 @@ app.get('/health', (req, res) => {
 
 
 app.use('/api/ocr', ocrRouter)
-
+app.use('/api/group', groupRouter)
+app.use('/api/transaction', transactionRouter)
 
 app.use('*', (req, res, next) => {
     res.status(404)

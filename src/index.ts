@@ -3,6 +3,14 @@ import 'dotenv/config';
 import { app } from './app';
 import { sequelize } from './database';
 import { User } from './model/User';
+import { BudgetNotification } from './model/BudgetNotification';
+import { Category } from './model/Category';
+import { Goal } from './model/Goal';
+import { GroupSpace } from './model/GroupSpace';
+import { GroupMember } from './model/GroupMember';
+import { GroupTransaction } from './model/GroupTransaction';
+import { Transaction } from './model/Transaction';
+import { Wallet } from './model/Wallet';
 const PORT = parseInt(process.env.PORT || '3000');
 
 async function main(){
@@ -12,11 +20,19 @@ async function main(){
   
 
 const models = [
-    User
+    User,
+    BudgetNotification,
+    Category,
+    Goal,
+    GroupSpace,
+    GroupMember,
+    GroupTransaction,
+    Transaction,
+    Wallet
 ]
 
 for (const model of models) {
-  await model.sync()
+  await model.sync();
 }
 
 
