@@ -4,3 +4,4 @@ dist
 logs
 buffer/*
 !buffer/.gitkeep
+*.pem

@@ -1,8 +1,9 @@
 import { Router } from 'express';
+import KeyPair from '../module/KeyPair';
 
 const router = Router();
 
-router.post('/create', (req, res) => {
+router.post('/create', KeyPair.requireAuth(), (req, res) => {
     
 })
 

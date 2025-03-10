@@ -4,6 +4,7 @@ import multer from "multer";
 import fs from "fs";
 import sharp from "sharp";
 import path from "path";
+import KeyPair from "../module/KeyPair";
 
 const router = Router();
 
@@ -64,7 +65,7 @@ const performOCR = async (imagePath: string): Promise<{ name?: string; amount?: 
 };
   
 
-router.post("/receipt", upload.single("image"), async (req, res, next): Promise<void> => {
+router.post("/receipt", upload.single("image"), KeyPair.requireAuth(), async (req, res, next): Promise<void> => {
     try {
         const { image } = req.body;
         const uploadedFile = req.file;

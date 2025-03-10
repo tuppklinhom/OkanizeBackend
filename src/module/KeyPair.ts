@@ -29,6 +29,7 @@ export class KeyPair extends Module {
                 existsSync(path.resolve('./publickey.pem'))
             )
         ) {
+            genKeyPair()
             throw new Error("require PEM files");
         }
         this._privateKey = readFileSync('./privatekey.pem', { encoding: 'utf8' })
