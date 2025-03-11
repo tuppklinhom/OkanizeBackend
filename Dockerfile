@@ -23,7 +23,7 @@ ENV DATABASE_NAME=okanize_db
 # Build TypeScript
 RUN npm run build
 
-RUN node .\dist\scripts\genKeyPair.js
+RUN node ./dist/scripts/genKeyPair.js
 
 # Expose the port the app runs on
 EXPOSE 3000
