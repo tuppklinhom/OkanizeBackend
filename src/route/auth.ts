@@ -11,7 +11,11 @@ router.post('/login', async (req, res) => {
         const user = await User.findOne({where: {email: email}});
     
         if (user && password === user.password) {
-            const token = KeyPair.signJWT({ password });
+            const token = KeyPair.signJWT({ 
+                userId: user.user_id,
+                email: user.email,
+                name: user.name,
+            });
             res.json({ token });
         } else {
             res.status(401).json({ message: 'Invalid username or password' });

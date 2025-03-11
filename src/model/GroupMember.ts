@@ -11,7 +11,7 @@ export class GroupMember extends Model<InferAttributes<GroupMember>, InferCreati
     declare group_member_id: CreationOptional<number>;
     declare space_id: number;
     declare user_id: number;
-    declare role: string;
+    declare role: 'Admin' | 'Member';
 }
 
 GroupMember.init(
@@ -30,7 +30,7 @@ GroupMember.init(
             allowNull: false,
         },
         role: {
-            type: new DataTypes.STRING(255),
+            type: DataTypes.ENUM('Admin', 'Member'),
             allowNull: false,
         },
     },

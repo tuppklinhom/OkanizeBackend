@@ -9,14 +9,14 @@ import { sequelize } from '../database';
 
 export class Transaction extends Model<InferAttributes<Transaction>, InferCreationAttributes<Transaction>> {
     declare transaction_id: CreationOptional<number>;
-    declare wallet_id: number;
+    declare wallet_id: CreationOptional<number>;
     declare category_id: CreationOptional<number | null>;
-    declare amount: number;
+    declare amount: CreationOptional<number>;
     declare type: 'Income' | 'Expense' | 'initial';
-    declare date: Date;
-    declare note: string;
-    declare receipt_image_base64: string;
-    declare is_sorted: boolean;
+    declare date: CreationOptional<Date>;
+    declare note: CreationOptional<string>;
+    declare receipt_image_base64: CreationOptional<string>;
+    declare is_sorted: CreationOptional<boolean>;
 }
 
 Transaction.init(
@@ -28,7 +28,7 @@ Transaction.init(
         },
         wallet_id: {
             type: DataTypes.INTEGER.UNSIGNED,
-            allowNull: false,
+            allowNull: true,
         },
         category_id: {
             type: DataTypes.INTEGER.UNSIGNED,
