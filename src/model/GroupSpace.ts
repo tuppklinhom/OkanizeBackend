@@ -11,6 +11,7 @@ export class GroupSpace extends Model<InferAttributes<GroupSpace>, InferCreation
     declare space_id: CreationOptional<number>;
     declare name: string;
     declare description: string;
+    declare isClosed: boolean
 }
 
 GroupSpace.init(
@@ -28,6 +29,10 @@ GroupSpace.init(
             type: new DataTypes.STRING(255),
             allowNull: true,
         },
+        isClosed:{
+            type: new DataTypes.BOOLEAN,
+            defaultValue: false
+        }
     },
     {
         sequelize,

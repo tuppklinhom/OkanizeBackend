@@ -13,7 +13,6 @@ interface SplitMember {
     userID: number;
     amount: number;
 }
-
 router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
     try {
         const token = req.headers['access-token'] as string;
@@ -32,6 +31,7 @@ router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<an
         const group = await GroupSpace.create({
             name: groupName,
             description: groupDescription,
+            isClosed: false
         });
 
         await GroupMember.create({
@@ -99,7 +99,7 @@ router.get('/query', KeyPair.requireAuth() ,async (req, res, next): Promise<any>
             if (!groupObj) {
                 return null
             }
-            return {groupName: groupObj.name, groupDescription: groupObj.description, groupMember: groupMembers};
+            return {groupID: groupObj.space_id , groupName: groupObj.name, groupDescription: groupObj.description, groupMember: groupMembers, groupStatus: groupObj.isClosed? "Closed":"Active"};
         }))
 
 
@@ -216,8 +216,11 @@ router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next)
         }
 
         const transaction = await Transaction.findOne({where: {transaction_id: groupTransaction.transaction_id}})
+        if (!transaction){
+            return res.status(400).json({ message: 'Transaction not found' });
+        }
 
-        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupTransaction.space_id, user_id: payloadData.userID } }); 
+        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupTransaction.space_id, user_id: payloadData.userId } }); 
         if (!groupMemberObj || groupMemberObj.role !== 'Admin'){
             return res.status(400).json({ message: 'Invalid command' });
         }
@@ -228,13 +231,16 @@ router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next)
         
         for (const eachSplit of splitMember) {
             if (typeof eachSplit.userID !== 'number' || typeof eachSplit.amount !== 'number') {
-                return res.status(400).json("Each item must have userID and amount as numbers.");
+                return res.status(400).json({message: "Each item must have userID and amount as numbers."});
             }
         }
         const totalAmount = splitMember.reduce((sum, eachSplit) => sum + eachSplit.amount, 0);
+        const transactionAmount = parseFloat(transaction.amount as unknown as string)
 
-        if (totalAmount !== transaction?.amount) {
-            return res.status(400).json(`Sum of amounts does not match the expected sum. Expected: ${transaction?.amount}, Found: ${totalAmount}`);
+        if (totalAmount != transactionAmount) {
+            return res.status(400).json({
+                message: `Sum of amounts does not match the expected sum. Expected: ${transactionAmount}, Found: ${totalAmount}`
+            });
         }
         
         await groupTransaction.update({split_member: splitMember});
@@ -266,7 +272,7 @@ router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<
             return res.status(400).json({ message: 'Group not found' });
         }
 
-        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupSpace.space_id, user_id: payloadData.userID } }); 
+        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupSpace.space_id, user_id: payloadData.userId } }); 
         if (!groupMemberObj || groupMemberObj.role !== 'Admin'){
             return res.status(400).json({ message: 'Invalid command' });
         }
@@ -277,8 +283,10 @@ router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<
         for (const groupTransaction of groupTransactions) {
             const currentTransaction = await Transaction.findOne({where: {transaction_id: groupTransaction.transaction_id}})
             if (!currentTransaction) {throw new Error("No Transaction")}
-            if (groupTransaction.split_member == null ||groupTransaction.split_member == undefined){
-                let countMember = 0
+
+            if (!groupTransaction.split_member || Object.keys(groupTransaction.split_member).length === 0) {
+                console.log("yay")
+                let countMember = 0;
                 //auto split with all member
                 const memberIDList = allMember.map((member) =>{
                     countMember += 1
@@ -298,10 +306,16 @@ router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<
                         note: groupTransaction.description
                     })
                 }
+
+                await currentTransaction.destroy()
+                await groupTransaction.destroy()
+
+                await currentTransaction.save()
+                await groupTransaction.save()
                 
             }else{  
                 const splitSheets = groupTransaction.split_member
-
+                console.log("nay")
                 for (const splitSheet of splitSheets as Array<SplitMember>){
                     const userObj = await User.findByPk(splitSheet.userID) 
                     await Transaction.create({
@@ -313,10 +327,18 @@ router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<
                         note: groupTransaction.description
                     })
                 }
+                await currentTransaction.destroy()
+                await groupTransaction.destroy()
+
+                await currentTransaction.save()
+                await groupTransaction.save()
 
             }
         }
 
+        groupSpace.isClosed = true
+        await groupSpace.save()
+        res.status(200).json({status: "confirm success"})
     }catch(error){
         console.error(error);
         res.status(500).json({ message: 'Internal server error' });
