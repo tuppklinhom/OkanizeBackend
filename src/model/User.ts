@@ -14,6 +14,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
     declare password: string;
     declare line_bot_id?: string;
     declare default_category?: CreationOptional<number | null>;
+    declare default_wallet: number;
 }
 User.init(
     {
@@ -43,6 +44,11 @@ User.init(
             type: DataTypes.INTEGER.UNSIGNED,
             allowNull: true, // Can be null if no category is set
         },
+        default_wallet:{
+            type: DataTypes.INTEGER.UNSIGNED,
+            allowNull: false, 
+        }
+        
     },
     {
         sequelize,

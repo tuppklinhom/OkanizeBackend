@@ -9,6 +9,12 @@ import { GroupTransaction } from '../model/GroupTransaction';
 
 const router = Router();    
 
+interface SplitMember {
+    userID: number;
+    amount: number;
+    categoryID: number;  // Include other properties like categoryID if they exist
+}
+
 router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
     try {
         const token = req.headers['access-token'] as string;
@@ -181,8 +187,9 @@ router.post('/transaction/query', KeyPair.requireAuth() ,async (req, res, next):
 
         const transactionList = await Promise.all(groupTransactionList.map(async (groupTransaction) => {
             const transaction = await Transaction.findOne({ where: { transaction_id: groupTransaction.transaction_id } });
-            return {groupTransactionID: groupTransaction.group_transaction_id, description: groupTransaction.description ,transaction: transaction?.dataValues};
+            return {groupTransactionID: groupTransaction.group_transaction_id, description: groupTransaction.description ,transaction: transaction?.dataValues, groupSplit: groupTransaction.split_member};
         }))
+        
 
         return res.status(200).json(transactionList)
     }catch(error){
@@ -191,11 +198,131 @@ router.post('/transaction/query', KeyPair.requireAuth() ,async (req, res, next):
     }
 })
 
-router.post('/transaction/split', (req, res) => {
+router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next): Promise<any>=> {
+    try{
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        const { groupTransactionID, splitMember } = req.body;
+        if (!groupTransactionID || !splitMember){
+            return res.status(400).json({ message: 'Invalid input' });
+        }
+
+        const groupTransaction = await GroupTransaction.findOne({ where: { group_transaction_id: groupTransactionID } });
+        if (!groupTransaction){
+            return res.status(400).json({ message: 'Group transaction not found' });
+        }
+
+        const transaction = await Transaction.findOne({where: {transaction_id: groupTransaction.transaction_id}})
+
+        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupTransaction.space_id, user_id: payloadData.userID } }); 
+        if (!groupMemberObj || groupMemberObj.role !== 'Admin'){
+            return res.status(400).json({ message: 'Invalid command' });
+        }
+
+        if (!Array.isArray(splitMember)) {
+            return res.status(400).json("Data must be an array.");
+        }
+        
+        for (const eachSplit of splitMember) {
+            if (typeof eachSplit.userID !== 'number' || typeof eachSplit.amount !== 'number' || typeof eachSplit.categoryID !== "number") {
+                return res.status(400).json("Each item must have userID and amount and categoryID as numbers.");
+            }
+        }
+        const totalAmount = splitMember.reduce((sum, eachSplit) => sum + eachSplit.amount, 0);
+
+        if (totalAmount !== transaction?.amount) {
+            return res.status(400).json(`Sum of amounts does not match the expected sum. Expected: ${transaction?.amount}, Found: ${totalAmount}`);
+        }
+        
+        await groupTransaction.update({split_member: splitMember});
+        return res.status(200).json({
+            groupTransaction: groupTransaction.group_transaction_id, description: groupTransaction.description, splitMember: splitMember, status: "success"
+        })
+    }catch(error){
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 
 })
 
-router.post('/transaction/confirm', (req, res) => {
+router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<any>=> {
+    try{
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        const { groupSpaceID } = req.body;
+        if (!groupSpaceID){
+            return res.status(400).json({ message: 'Invalid input' });
+        }
+
+        const groupSpace = await GroupSpace.findOne({ where: { space_id: groupSpaceID } });
+        if (!groupSpace){
+            return res.status(400).json({ message: 'Group not found' });
+        }
+
+        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupSpace.space_id, user_id: payloadData.userID } }); 
+        if (!groupMemberObj || groupMemberObj.role !== 'Admin'){
+            return res.status(400).json({ message: 'Invalid command' });
+        }
+
+        const groupTransactions = await GroupTransaction.findAll({where: {space_id: groupSpace.space_id}})
+        const allMember = await GroupMember.findAll({where: {space_id: groupSpace.space_id}})
+
+        for (const groupTransaction of groupTransactions) {
+            const currentTransaction = await Transaction.findOne({where: {transaction_id: groupTransaction.transaction_id}})
+            if (!currentTransaction) {throw new Error("No Transaction")}
+            if (groupTransaction.split_member == null ||groupTransaction.split_member == undefined){
+                let countMember = 0
+                //auto split with all member
+                const memberIDList = allMember.map((member) =>{
+                    countMember += 1
+                    return member.user_id 
+                })
+
+                const eachMemberPrice = currentTransaction.amount / countMember
+
+                for (const memberID of memberIDList){
+                    const userObj = await User.findByPk(memberID) 
+                    await Transaction.create({
+                        wallet_id: userObj?.default_wallet,
+                        category_id: userObj?.default_category,
+                        amount: eachMemberPrice,
+                        date: currentTransaction.date,
+                        type: 'Expense',
+                        note: groupTransaction.description
+                    })
+                }
+                
+            }else{  
+                const splitSheets = groupTransaction.split_member
+
+                for (const splitSheet of splitSheets as Array<SplitMember>){
+                    const userObj = await User.findByPk(splitSheet.userID) 
+                    await Transaction.create({
+                        wallet_id: userObj?.default_wallet,
+                        category_id: splitSheet.categoryID,
+                        amount: splitSheet.amount,
+                        date: currentTransaction.date,
+                        type: 'Expense',
+                        note: groupTransaction.description
+                    })
+                }
+
+            }
+        }
+
+    }catch(error){
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+
 
 })
 export default router;
