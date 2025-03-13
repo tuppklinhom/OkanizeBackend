@@ -12,7 +12,6 @@ const router = Router();
 interface SplitMember {
     userID: number;
     amount: number;
-    categoryID: number;  // Include other properties like categoryID if they exist
 }
 
 router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
@@ -228,8 +227,8 @@ router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next)
         }
         
         for (const eachSplit of splitMember) {
-            if (typeof eachSplit.userID !== 'number' || typeof eachSplit.amount !== 'number' || typeof eachSplit.categoryID !== "number") {
-                return res.status(400).json("Each item must have userID and amount and categoryID as numbers.");
+            if (typeof eachSplit.userID !== 'number' || typeof eachSplit.amount !== 'number') {
+                return res.status(400).json("Each item must have userID and amount as numbers.");
             }
         }
         const totalAmount = splitMember.reduce((sum, eachSplit) => sum + eachSplit.amount, 0);
@@ -307,7 +306,7 @@ router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<
                     const userObj = await User.findByPk(splitSheet.userID) 
                     await Transaction.create({
                         wallet_id: userObj?.default_wallet,
-                        category_id: splitSheet.categoryID,
+                        category_id: userObj?.default_category,
                         amount: splitSheet.amount,
                         date: currentTransaction.date,
                         type: 'Expense',
