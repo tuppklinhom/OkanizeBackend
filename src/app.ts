@@ -4,6 +4,7 @@ import ocrRouter from './route/ocr'
 import groupRouter from './route/group'
 import transactionRouter from './route/transaction'
 import authRouter from './route/auth'
+import userRouter from './route/user'
 
 export const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/ocr', ocrRouter)
 app.use('/api/group', groupRouter)
 app.use('/api/transaction', transactionRouter)
 app.use('/api/auth', authRouter)
+app.use('/api/user', userRouter)
 
 app.use('*', (req, res, next) => {
     res.status(404)

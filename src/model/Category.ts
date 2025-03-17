@@ -24,7 +24,7 @@ Category.init(
         },
         user_id: {
             type: DataTypes.INTEGER.UNSIGNED,
-            allowNull: false,
+            allowNull: true,
         },
         name: {
             type: new DataTypes.STRING(255),
