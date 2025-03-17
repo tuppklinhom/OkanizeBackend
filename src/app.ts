@@ -14,7 +14,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const apifunc = (req:any, res:any) => {
     res.status(200).json({
         status: res.statusCode,
-        message: 'api ok',
+        message: 'api ok test deploy',
     })
 }
 
