@@ -18,8 +18,15 @@ services:
       virtual.host: "okanizeapi.shopsthai.com"
       virtual.tls-email: limweb@hotmail.com
       virtual.port: "4000"
-    env_file:
-      - .env.example
+    environment:
+      - DATABASE_HOST=dbpostgresql
+      - DATABASE_PORT=5432
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=o8&7Ez#SeozKLXFr
+      - DATABASE_NAME=okanize_db
+      - PORT=4000
+    # env_file:
+    #   - .env.example
 
 networks:
   default:
