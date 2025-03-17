@@ -13,7 +13,7 @@ services:
       - "4000:4000"
     expose:
       - "4000"
-    command: "/usr/local/bin/php /app/index.php"
+    command: "npm start"
     volumes:
       - ./:/app/
     labels:
