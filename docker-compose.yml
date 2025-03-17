@@ -25,8 +25,6 @@ services:
       - DATABASE_PASSWORD=o8&7Ez#SeozKLXFr
       - DATABASE_NAME=okanize_db
       - PORT=4000
-    # env_file:
-    #   - .env.example
 
 networks:
   default:
