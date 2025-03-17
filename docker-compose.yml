@@ -18,8 +18,8 @@ services:
       virtual.host: "okanizeapi.shopsthai.com"
       virtual.tls-email: limweb@hotmail.com
       virtual.port: "4000"
-    env_file:
-      - .env
+    # env_file:
+    #   - .env
 
 networks:
   default:
