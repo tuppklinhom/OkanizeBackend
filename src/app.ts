@@ -11,12 +11,15 @@ app.use(json())
 app.use(bodyParser.json({ limit: "10mb" })); // Support JSON body with base64 images
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.get('/', (req, res) => {
+const apifunc = (req:any, res:any) => {
     res.status(200).json({
         status: res.statusCode,
         message: 'api ok',
     })
-})
+}
+
+app.get('/',apifunc)
+app.get('/api',apifunc)
 
 app.get('/health', (req, res) => {
     res.status(200).json({
