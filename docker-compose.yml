@@ -13,7 +13,7 @@ services:
       - "4000:4000"
     expose:
       - "4000"
-    command: "npm start"
+    command: "npm start && sleep 5000"
     volumes:
       - ./:/app/
     labels:
@@ -22,6 +22,7 @@ services:
       virtual.tls-email: limweb@hotmail.com
       virtual.port: "4000"
     environment:
+      - ENV DATABASE_HOST=dbpostgresql
       - DATABASE_HOST=203.154.91.229
       - DATABASE_PORT=5432
       - DATABASE_USER=postgres
