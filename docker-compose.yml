@@ -7,15 +7,12 @@ services:
       dockerfile: Dockerfile
     image: "okanizebackend:v1"
     container_name: OkanizeBackend
-    working_dir: /app/
+    working_dir: /app
     restart: "always"
     ports:
       - "4000:4000"
     expose:
       - "4000"
-    command: "npm start && sleep 5000"
-    volumes:
-      - ./:/app/
     labels:
       com.docker.compose.project: "OkanizeBackend"
       virtual.host: "okanizeapi.shopsthai.com"
@@ -28,6 +25,7 @@ services:
       - DATABASE_PASSWORD=o8&7Ez#SeozKLXFr
       - DATABASE_NAME=okanize_db
       - PORT=4000
+     
 
 networks:
   default:
