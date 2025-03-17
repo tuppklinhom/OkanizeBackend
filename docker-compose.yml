@@ -22,8 +22,7 @@ services:
       virtual.tls-email: limweb@hotmail.com
       virtual.port: "4000"
     environment:
-      - ENV DATABASE_HOST=dbpostgresql
-      - DATABASE_HOST=203.154.91.229
+      - DATABASE_HOST=dbpostgresql
       - DATABASE_PORT=5432
       - DATABASE_USER=postgres
       - DATABASE_PASSWORD=o8&7Ez#SeozKLXFr
