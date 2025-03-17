@@ -1,0 +1,28 @@
+#  docker-compose -f docker-compose.yml config check validate config
+version: "3.7"
+services:
+  OkanizeBackend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "okanizebackend:v1"
+    container_name: OkanizeBackend
+    working_dir: /app/
+    restart: "always"
+    ports:
+      - "4000:4000"
+    expose:
+      - "4000"
+    command: "/usr/local/bin/php /app/index.php"
+    volumes:
+      - ./:/app/
+    labels:
+      com.docker.compose.project: "OkanizeBackend"
+      virtual.host: "okanizeapi.shopsthai.com"
+      virtual.tls-email: limweb@hotmail.com
+      virtual.port: "4000"
+
+networks:
+  default:
+    external: true
+    name: proxy-network
