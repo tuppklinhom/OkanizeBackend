@@ -17,6 +17,7 @@ export class Transaction extends Model<InferAttributes<Transaction>, InferCreati
     declare note: CreationOptional<string>;
     declare receipt_image_base64: CreationOptional<string>;
     declare is_sorted: CreationOptional<boolean>;
+    declare is_paid: CreationOptional<boolean>;
 }
 
 Transaction.init(
@@ -57,6 +58,10 @@ Transaction.init(
         is_sorted: {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
+        },
+        is_paid: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
         },
     },
     {

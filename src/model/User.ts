@@ -15,6 +15,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
     declare line_bot_id?: string;
     declare default_category?: CreationOptional<number | null>;
     declare default_wallet: number;
+    declare profile_image_base64: CreationOptional<string>;
 }
 User.init(
     {
@@ -47,6 +48,10 @@ User.init(
         default_wallet:{
             type: DataTypes.INTEGER.UNSIGNED,
             allowNull: false, 
+        },
+        profile_image_base64:{
+            type: DataTypes.TEXT,
+            allowNull: true
         }
         
     },
