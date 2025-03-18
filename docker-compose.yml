@@ -1,0 +1,32 @@
+#  docker-compose -f docker-compose.yml config check validate config
+version: "3.7"
+services:
+  OkanizeBackend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "okanizebackend:v1"
+    container_name: OkanizeBackend
+    working_dir: /app
+    restart: "always"
+    ports:
+      - "4000:4000"
+    expose:
+      - "4000"
+    labels:
+      com.docker.compose.project: "OkanizeBackend"
+      virtual.host: "okanizeapi.shopsthai.com"
+      virtual.tls-email: limweb@hotmail.com
+      virtual.port: "4000"
+    environment:
+      - DATABASE_HOST=dbpostgresql
+      - DATABASE_PORT=5432
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=o8&7Ez#SeozKLXFr
+      - DATABASE_NAME=okanize_db
+      - PORT=4000
+
+networks:
+  default:
+    external: true
+    name: proxy-network
