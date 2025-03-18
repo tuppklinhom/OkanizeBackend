@@ -5,6 +5,7 @@ import groupRouter from './route/group'
 import transactionRouter from './route/transaction'
 import authRouter from './route/auth'
 import userRouter from './route/user'
+import { configureCors } from './cors-config';
 
 export const app = express();
 
@@ -19,7 +20,8 @@ app.get('/health', (req, res) => {
     })
 })
 
-
+configureCors(app)
+  
 app.use('/api/ocr', ocrRouter)
 app.use('/api/group', groupRouter)
 app.use('/api/transaction', transactionRouter)
