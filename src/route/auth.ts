@@ -55,7 +55,7 @@ router.post('/login', async (req, res) => {
             console.log('created new User', userObj.dataValues)
         }
         const userJSON = {
-            userid: userObj.user_id,
+            userId: userObj.user_id,
             username: userObj.username,
             iat: Date.now(),
             exp: Date.now() + 1000 * 60 * 5,
@@ -79,8 +79,10 @@ router.post('/confirm_username', KeyPair.requireAuth(), async (req, res, next): 
             return res.status(400).json({ message: 'Invalid token' });
         }
 
+        console.log(payloadData)
+
         const username = req.body.username
-        const user = await User.findByPk(payloadData.userId)
+        const user = await User.findOne({where: {user_id: payloadData.userId}})
         const userChecker = await User.findOne({where: {username: username}})
         if (!user){
             return res.status(400).json({ message: 'Invalid token: no user' });
@@ -90,11 +92,11 @@ router.post('/confirm_username', KeyPair.requireAuth(), async (req, res, next): 
         }else{
             await user.update({username})
             await user.save()
-            return res.status(200).json({user})
+            return res.status(200).json(user)
         }
         
     }catch(error){
-        console.log(error);
+        res.status(400).json({error: error})
     }
 })
 
