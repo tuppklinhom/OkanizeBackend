@@ -107,8 +107,15 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
             order: [['date', 'DESC']]
         });
 
+        const sumPrice = transactions.reduce((sum, transaction) => {
+            return sum + transaction.amount;
+        }, 0);
 
-        return res.status(200).json({transactions})
+
+        return res.status(200).json({
+            sumPrice: sumPrice,
+            transactionsList: transactions
+        })
 
     }catch(error){
         console.error(error);

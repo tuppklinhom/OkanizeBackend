@@ -11,6 +11,7 @@ import { GroupMember } from './model/GroupMember';
 import { GroupTransaction } from './model/GroupTransaction';
 import { Transaction } from './model/Transaction';
 import { Wallet } from './model/Wallet';
+import { UserBudgetLimit } from './model/UserBudgetLimit';
 const PORT = parseInt(process.env.PORT || '3000');
 
 async function main(){
@@ -18,7 +19,7 @@ async function main(){
   .then(() => console.log('Database connection established'))
   .catch((err: Error) => console.error('Unable to connect to the database:', err));
   
-
+  
 const models = [
     User,
     BudgetNotification,
@@ -28,7 +29,8 @@ const models = [
     GroupMember,
     GroupTransaction,
     Transaction,
-    Wallet
+    Wallet,
+    UserBudgetLimit
 ]
 
 for (const model of models) {

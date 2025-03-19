@@ -63,11 +63,12 @@ export class KeyPair extends Module {
                 // Using this if Access-Token
                 const token = req.header('Access-Token')
                 const result = this.verifyJWT(token)
+                console.log(result)
                 if (result.status && result.status === 403) { throw result }
                 res.locals.user = result
                 next()
             } catch (error) {
-                res.status(401).json({ status: 401, message: "expiredToken" })
+                res.status(401).json({ status: 401, message: `expiredToken ${error}` })
             }
         }
     }

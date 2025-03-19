@@ -10,9 +10,9 @@ import { sequelize } from '../database';
 export class Category extends Model<InferAttributes<Category>, InferCreationAttributes<Category>> {
     declare category_id: CreationOptional<number>;
     declare user_id: number;
-    declare name: string;
-    declare budget_limit: number;
+    declare name: CreationOptional<string>;
     declare image_base64: string;
+    declare type: 'Income' | 'Expense'
 }
 
 Category.init(
@@ -30,12 +30,12 @@ Category.init(
             type: new DataTypes.STRING(255),
             allowNull: false,
         },
-        budget_limit: {
-            type: DataTypes.DECIMAL(10, 2),
-            allowNull: false,
-        },
         image_base64: {
             type: DataTypes.TEXT,
+            allowNull: false,
+        },
+        type: {
+            type: DataTypes.ENUM('Income', 'Expense'),
             allowNull: false,
         },
     },

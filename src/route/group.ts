@@ -44,7 +44,7 @@ router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<an
             const userObj = await User.findOne({ where: { user_id: user } });
 
             if (userObj){
-                userList.push({name: userObj.name, email: userObj.email});
+                userList.push({name: userObj.username, profile: userObj.profile_image_base64});
                 await GroupMember.create({
                     space_id: group.space_id,
                     user_id: userObj.user_id,

@@ -4,6 +4,7 @@ import { Category } from '../model/Category';
 import { Op } from 'sequelize';
 import KeyPair from '../module/KeyPair';
 import jwt from 'jsonwebtoken';
+import { UserBudgetLimit } from '../model/UserBudgetLimit';
 
 const router = Router();
 
@@ -18,9 +19,20 @@ router.post('/category/create', KeyPair.requireAuth(),async (req, res, next): Pr
         if (typeof payloadData === 'string' || !payloadData) {
             return res.status(400).json({ message: 'Invalid token' });
         }
-        const {name, budgetLimit, imageBase64 } = req.body;
-        const category = await Category.create({ user_id: payloadData.userId, name: name, budget_limit: budgetLimit, image_base64: imageBase64 });
-        res.status(201).json(category);
+        const {name, budgetLimit, imageBase64, type } = req.body;
+        const category = await Category.create({ user_id: payloadData.userId, name: name,type: type, image_base64: imageBase64 });
+        if(budgetLimit){
+            const budgetLimitObj = await UserBudgetLimit.create({user_id: payloadData.userId, category_id: category.category_id, budget_limit: budgetLimit})
+            res.status(201).json({
+                ...category,
+                budget_limit: budgetLimitObj.budget_limit
+            });
+        }else{
+            res.status(201).json({
+                ...category,
+                budget_limit: 0
+            });
+        }
     } catch (error) {
         res.status(500).json({ error: 'Failed to create category', details: error });
     }
@@ -55,25 +67,38 @@ router.patch('/category/update', KeyPair.requireAuth(),async (req, res, next): P
             return res.status(400).json({ message: 'Invalid token' });
         }
 
-        let { categoryID, name, budgetLimit, imageBase64 } = req.body;
+        let { categoryID, name, budgetLimit, type, imageBase64 } = req.body;
 
         const category = await Category.findOne({ where: { category_id: categoryID, user_id: payloadData.userId } });
+        let budgetLimitObj =  await UserBudgetLimit.findOne({where: { category_id: categoryID, user_id: payloadData.userId }})
 
-        if (!category) return res.status(404).json({ error: 'Category not found' });
+        if (!category || !budgetLimitObj) return res.status(404).json({ error: 'Category not found' });
 
         if(!name){
             name = category.name
         }
-        if(!budgetLimit){
-            budgetLimit = category.budget_limit
+        if(!type){
+            budgetLimit = category.type
         }
         if(!imageBase64){
             imageBase64 = category.image_base64
         }
 
-        await category.update({ name: name, budget_limit: budgetLimit, image_base64: imageBase64 });
+        if(budgetLimit){
+            if(budgetLimitObj){
+                await budgetLimitObj.update({budget_limit: budgetLimit})
+                await budgetLimit.save()
+            }else{
+                budgetLimitObj = await UserBudgetLimit.create({category_id: categoryID, user_id: payloadData.userId, budget_limit: budgetLimit}) 
+            }
+        }
+
+        await category.update({ name: name, type: type,image_base64: imageBase64 });
         await category.save()
-        res.json(category);
+        res.json({
+           ...category,
+           budget_limit: budgetLimitObj.budget_limit ? budgetLimitObj.budget_limit : 0 
+        });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update category', details: error });
     }
