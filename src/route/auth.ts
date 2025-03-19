@@ -16,7 +16,7 @@ router.post('/login', async (req, res) => {
         const payloadBody = JSON.parse(Buffer.from(jwt[1], 'base64').toString('utf8'))
         const urlencoded = new URLSearchParams()
         urlencoded.append('id_token', payload)
-        urlencoded.append('client_id', process.env.LINE_CHANNEL_ID || "2007080323")
+        urlencoded.append('client_id', process.env.LINE_CHANNEL_ID || "2007080121")
 
         const isError = await fetch('https://api.line.me/oauth2/v2.1/verify', {
             method: 'POST',
