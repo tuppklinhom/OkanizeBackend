@@ -8,6 +8,7 @@ import { User } from '../model/User';
 import { Op, WhereOptions } from 'sequelize';
 import { isBooleanObject } from 'util/types';
 import { Wallet } from '../model/Wallet';
+import { TransactionWithNotification } from '../module/TransactionWithNotification';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -52,14 +53,13 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
             }
 
     
-            const transaction = await Transaction.create({
+            const transaction = await TransactionWithNotification.createTransactionWithNotification(user.user_id, {
                 amount: amount,
                 wallet_id: wallet_id,
                 category_id: category_id,
                 note: note,
-                type: type,
-                date: new Date(),
-            });
+                type: type
+            })
             return res.status(200).json(transaction)
     
         }catch(error){
@@ -101,7 +101,10 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
             whereClause.amount = { ...whereClause.amount, [Op.lte]: reqBody.maxAmount };
         }
         if (reqBody.isSorted) {
-            whereClause
+            whereClause.is_sorted = reqBody.isSorted;
+        }
+        if (reqBody.isPaid){
+            whereClause.is_paid = reqBody.isPaid;
         }
 
         const transactions = await Transaction.findAll({
@@ -110,7 +113,7 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
         });
 
         const sumPrice = transactions.reduce((sum, transaction) => {
-            return sum + transaction.amount;
+            return sum + parseFloat(transaction.amount as unknown as string);
         }, 0);
 
 
@@ -144,9 +147,11 @@ router.patch('/update', KeyPair.requireAuth(),async (req, res, next): Promise<an
             return res.status(400).json({message: "Transaction Not Found."})
         }
 
-        let {wallet_id, category_id, type, isSorted} = req.body
+        let {wallet_id, category_id, type, isSorted, isPaid, amount, note} = req.body
         
-
+        if (!amount) {
+            amount = transaction.amount;
+        }
         if (!wallet_id) {
             wallet_id = transaction.wallet_id;
         }
@@ -156,19 +161,25 @@ router.patch('/update', KeyPair.requireAuth(),async (req, res, next): Promise<an
         if (!type) {
             type = transaction.type;
         }
+        if (!note) {
+            note = transaction.note;
+        }
         if (isSorted !== true && isSorted !== false) {
-            isSorted = transaction.is_sorted;
-            
+            isSorted = transaction.is_sorted;   
+        }
+        if (isPaid !== true && isPaid !== false) {
+            isPaid = transaction.is_paid;   
         }
 
-        const transactionEdited = await Transaction.update({
+        const transactionEdited = await TransactionWithNotification.updateTransactionWithNotification(user.user_id, transaction.transaction_id,{
+            amount: amount,
             wallet_id: wallet_id,
             category_id: category_id,
             type: type,
-            is_sorted: isSorted
-            },{
-            where: {transaction_id: transaction_id}
-        });
+            isSorted: isSorted,
+            isPaid: isPaid,
+            note: note
+            });
 
 
         return res.status(200).json(transactionEdited)
