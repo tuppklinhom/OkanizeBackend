@@ -24,12 +24,12 @@ router.post('/category/create', KeyPair.requireAuth(),async (req, res, next): Pr
         if(budgetLimit){
             const budgetLimitObj = await UserBudgetLimit.create({user_id: payloadData.userId, category_id: category.category_id, budget_limit: budgetLimit})
             res.status(201).json({
-                ...category,
+                ...category.dataValues,
                 budget_limit: budgetLimitObj.budget_limit
             });
         }else{
             res.status(201).json({
-                ...category,
+                ...category.dataValues,
                 budget_limit: 0
             });
         }
@@ -52,7 +52,16 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
                 [Op.or]: [{ user_id: payloadData.userId }, { user_id: null }]
             }
         });
-        res.json(categories);
+
+        const categoriesWithBudgetLimit = await Promise.all(categories.map(async (category) => {
+            const budgetLimitObj = await UserBudgetLimit.findOne({where: {category_id: category.category_id, user_id: payloadData.userId}}) 
+            return {
+                ...category.dataValues,
+                budget_limit: budgetLimitObj? budgetLimitObj.budget_limit : 0
+            }
+        }
+        ));
+        res.json(categoriesWithBudgetLimit);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch categories', details: error });
     }
@@ -72,7 +81,7 @@ router.patch('/category/update', KeyPair.requireAuth(),async (req, res, next): P
         const category = await Category.findOne({ where: { category_id: categoryID, user_id: payloadData.userId } });
         let budgetLimitObj =  await UserBudgetLimit.findOne({where: { category_id: categoryID, user_id: payloadData.userId }})
 
-        if (!category || !budgetLimitObj) return res.status(404).json({ error: 'Category not found' });
+        if (!category) return res.status(404).json({ error: 'Category not found' });
 
         if(!name){
             name = category.name
@@ -96,8 +105,8 @@ router.patch('/category/update', KeyPair.requireAuth(),async (req, res, next): P
         await category.update({ name: name, type: type,image_base64: imageBase64 });
         await category.save()
         res.json({
-           ...category,
-           budget_limit: budgetLimitObj.budget_limit ? budgetLimitObj.budget_limit : 0 
+           ...category.dataValues,
+           budget_limit: budgetLimitObj?  budgetLimitObj.budget_limit : 0 
         });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update category', details: error });

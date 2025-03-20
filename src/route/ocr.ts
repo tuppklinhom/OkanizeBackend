@@ -28,7 +28,7 @@ const extractStoreName = (text: string): string | undefined => {
 };
 
 const extractAmount = (text: string): string | undefined => {
-    const amountRegex = /(?:TOTAL|Total|Sub Total|AMOUNT|Amount|Balance|Due|Grand Total|ยอดสุทธิ|ยอดชำระสุทธิ|สุทธิ|ยอดรวม|รวม|ทั้งหมด|จำนวน|จำนวนเงิน)\s*[:฿]?\s*([\d,๐-๙]+(?:\.\d{2})?)/i;
+    const amountRegex = /(?:TOTAL|Total|Sub Total|AMOUNT|Amount|Balance|Due|Grand Total|ยอดสุทธิ|ยอดชำระสุทธิ|สุทธิ|ยอดรวม|รวม|ทั้งหมด|จำนวน|จำนวนเงิน|งิน)\s*[:฿]?\s*([\d,๐-๙]+(?:\.\d{2})?)/i;
     const lines = text.split("\n").map(line => line.trim()).filter(line => line !== "");
   
   // Iterate from bottom (last line) to top (first line)
@@ -46,6 +46,7 @@ const preprocessImage = async (inputPath: string, outputPath: string) => {
       .grayscale()
       .normalize()
       .resize(800)
+      .toFormat("png")
       .toFile(outputPath);
 };
 
@@ -65,7 +66,7 @@ const performOCR = async (imagePath: string): Promise<{ name?: string; amount?: 
 };
   
 
-router.post("/receipt", upload.single("image"), KeyPair.requireAuth(), async (req, res, next): Promise<void> => {
+router.post("/receipt", upload.single("image"), async (req, res, next): Promise<void> => {
     try {
         const { image } = req.body;
         const uploadedFile = req.file;
