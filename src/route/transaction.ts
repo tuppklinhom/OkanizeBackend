@@ -6,6 +6,8 @@ import multer from 'multer';
 import fs from 'fs'
 import { User } from '../model/User';
 import { Op, WhereOptions } from 'sequelize';
+import { isBooleanObject } from 'util/types';
+import { Wallet } from '../model/Wallet';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -124,5 +126,99 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
 
 })
 
+router.patch('/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> => {
+    try{
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+        const user = await User.findOne({where: {user_id: payloadData.userId}})
+        if (!user){
+            return res.status(400).json({message: "User Not Found."})
+        }
+
+        const transaction_id = req.body.transaction_id
+        const transaction = await Transaction.findOne({where: {transaction_id: transaction_id}})
+        if (!transaction){
+            return res.status(400).json({message: "Transaction Not Found."})
+        }
+
+        let {wallet_id, category_id, type, isSorted} = req.body
+        
+
+        if (!wallet_id) {
+            wallet_id = transaction.wallet_id;
+        }
+        if (!category_id) {
+            category_id = transaction.category_id;
+        }
+        if (!type) {
+            type = transaction.type;
+        }
+        if (isSorted !== true && isSorted !== false) {
+            isSorted = transaction.is_sorted;
+            
+        }
+
+        const transactionEdited = await Transaction.update({
+            wallet_id: wallet_id,
+            category_id: category_id,
+            type: type,
+            is_sorted: isSorted
+            },{
+            where: {transaction_id: transaction_id}
+        });
+
+
+        return res.status(200).json(transactionEdited)
+
+    }catch(error){
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+
+})
+
+
+router.delete('/delete', KeyPair.requireAuth(),async (req, res, next): Promise<any> => {
+    try{
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+        const user = await User.findOne({where: {user_id: payloadData.userId}})
+        if (!user){
+            return res.status(400).json({message: "User Not Found."})
+        }
+
+        const transaction_id = req.body.transaction_id
+        const transaction = await Transaction.findOne({where: {transaction_id: transaction_id}})
+        if (!transaction){
+            return res.status(400).json({message: "Transaction Not Found."})
+        }
+
+        const wallet = await Wallet.findOne({where: {wallet_id: transaction.wallet_id}})
+        if (!wallet){
+            return res.status(400).json({message: "Wallet Not Found."})
+        }
+
+        if(wallet.user_id !== user.user_id){
+            return res.status(400).json({message: "This wallet is not belong to this user."})
+        }
+
+        const transactionEdited = await Transaction.destroy({
+            where: {transaction_id: transaction_id}
+        });
+
+        return res.status(200).json(transactionEdited)
+
+    }catch(error){
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+
+})
 
 export default router;
