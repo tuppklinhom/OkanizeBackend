@@ -185,7 +185,7 @@ export class FriendServices {
 
       private static async sendLineNotification(receiver_line_id: string, sender: User, payload: any): Promise<void> {
         // Get appropriate message content based on notification type
-        const messageContent = this.buildLineMessageContent(payload, sender);
+        const messageContent = await this.buildLineMessageContent(payload, sender);
     
         const messagePayload = {
           to: receiver_line_id,

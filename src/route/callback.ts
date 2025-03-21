@@ -1,13 +1,9 @@
 import { Router } from 'express';
 import { FriendServices } from '../module/FriendServices';
 import { User } from '../model/User';
+// import queryString from 'query-string';
 // At the top of your file, declare the type but don't import
-let queryString: any;
 
-// At the beginning of your function or in an async initialization block
-async function initializeQueryString() {
-  queryString = await import('query-string');
-}
 
 // Make sure to call this before using queryString
 
@@ -18,7 +14,7 @@ const router = Router();
  * Handle Line webhook callbacks
  */
 router.post('/webhook', async (req, res) => {
-  await(initializeQueryString());
+
   try {
     // Line sends webhooks in a specific format
     const events = req.body.events;
@@ -46,21 +42,28 @@ router.post('/webhook', async (req, res) => {
  */
 async function handlePostback(event: any) {
   try {
-    const { data, params } = event.postback;
+    const { data } = event.postback;
     const userId = event.source.userId;
     
     // Parse the data from the postback
-    const parsedData = queryString.parse(data);
-    const action = parsedData.action as string;
+    const params = new URLSearchParams(data);
+    const action = params.get('action') || ''; // Provide default empty string
+    
+    // For the senderId, handle the potential null and parsing
+    const senderIdParam = params.get('sender_id');
+    const senderId = senderIdParam ? parseInt(senderIdParam) : null;
     
     // Get the user from the Line user ID
     const user = await User.findOne({ where: { line_id: userId } });
     if (!user) {
-      console.error('Unknown user for Line ID:', userId);
-      return;
+        console.error('Unknown user for Line ID:', userId);
+        return;
+    }
+    if (!senderId) {
+        console.error('Unknown sender ID:', senderId);
+        return;
     }
 
-    const senderId = parseInt(parsedData.sender_id as string);
     // Handle different actions
     switch (action) {
       case 'accept':
