@@ -12,6 +12,7 @@ import { GroupTransaction } from './model/GroupTransaction';
 import { Transaction } from './model/Transaction';
 import { Wallet } from './model/Wallet';
 import { UserBudgetLimit } from './model/UserBudgetLimit';
+import { FriendList } from './model/FriendList';
 const PORT = parseInt(process.env.PORT || '3000');
 
 async function main(){
@@ -30,7 +31,8 @@ const models = [
     GroupTransaction,
     Transaction,
     Wallet,
-    UserBudgetLimit
+    UserBudgetLimit,
+    FriendList
 ]
 
 for (const model of models) {

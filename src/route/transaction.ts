@@ -8,7 +8,7 @@ import { User } from '../model/User';
 import { Op, WhereOptions } from 'sequelize';
 import { isBooleanObject } from 'util/types';
 import { Wallet } from '../model/Wallet';
-import { TransactionWithNotification } from '../module/TransactionWithNotification';
+import { TransactionServices } from '../module/TransactionServices';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -53,7 +53,7 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
             }
 
     
-            const transaction = await TransactionWithNotification.createTransactionWithNotification(user.user_id, {
+            const transaction = await TransactionServices.createTransactionWithNotification(user.user_id, {
                 amount: amount,
                 wallet_id: wallet_id,
                 category_id: category_id,
@@ -105,6 +105,12 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
         }
         if (reqBody.isPaid){
             whereClause.is_paid = reqBody.isPaid;
+        }
+
+        if (!reqBody.wallet_id && !reqBody.category_id){
+            const wallets = await Wallet.findAll({where: {user_id: user.user_id}})
+            const walletIds = wallets.map(wallet => wallet.wallet_id) 
+            whereClause.wallet_id = {[Op.in]: walletIds}
         }
 
         const transactions = await Transaction.findAll({
@@ -171,7 +177,7 @@ router.patch('/update', KeyPair.requireAuth(),async (req, res, next): Promise<an
             isPaid = transaction.is_paid;   
         }
 
-        const transactionEdited = await TransactionWithNotification.updateTransactionWithNotification(user.user_id, transaction.transaction_id,{
+        const transactionEdited = await TransactionServices.updateTransactionWithNotification(user.user_id, transaction.transaction_id,{
             amount: amount,
             wallet_id: wallet_id,
             category_id: category_id,
