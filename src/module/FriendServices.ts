@@ -159,21 +159,21 @@ export class FriendServices {
             category_id: 0,
             type: 'Others',
             date: new Date(),
-            message: `${receiver.username} accepted your friend request`,
+            message: `${receiver.username} declined your friend request`,
             is_read: false
           });
     
           // TODO: Send a Line notification to the sender
           await this.sendLineNotification(sender.line_id, receiver,{
             // Notification details here
-            type: 'friend_request_accepted',
+            type: 'friend_request_declined',
             receiver: receiver.username,
             receiver_id: receiver.user_id
           });
     
           return {
             status: 'success',
-            message: 'Friend request accepted',
+            message: 'Friend request declined',
             notification: notification
           };
         } catch (error) {
@@ -213,7 +213,7 @@ export class FriendServices {
       }
 
 
-      public static buildLineMessageContent(payload: any, sender: User): any {
+      public static async buildLineMessageContent(payload: any, sender: User): Promise<any> {
         // Different message formats for different notification types
         switch (payload.type) {
           case 'friend_request':
@@ -344,12 +344,13 @@ export class FriendServices {
             };
             
           case 'friend_request_accepted':
+            const receiver = await User.findOne({ where: { user_id: payload.receiver_id } });
             return {
               type: "flex",
               altText: "Friend Request Accepted",
               contents: {
                 "type": "bubble",
-                "size": "giga",
+                "size": "mega",
                 "body": {
                   "type": "box",
                   "layout": "vertical",
@@ -364,7 +365,7 @@ export class FriendServices {
                           "contents": [
                             {
                               "type": "image",
-                              "url": "https://developers-resource.landpress.line.me/fx/clip/clip13.jpg",
+                              "url": `${receiver?.profile_image_base64}`,
                               "aspectMode": "cover",
                               "size": "full"
                             }
@@ -397,41 +398,6 @@ export class FriendServices {
                               ],
                               "size": "sm",
                               "wrap": true
-                            },
-                            {
-                              "type": "box",
-                              "layout": "horizontal",
-                              "contents": [
-                                {
-                                  "type": "box",
-                                  "layout": "baseline",
-                                  "contents": [
-                                    {
-                                      "type": "text",
-                                      "text": "View Profile",
-                                      "size": "sm",
-                                      "color": "#FFFFFF",
-                                      "margin": "sm",
-                                      "align": "center"
-                                    }
-                                  ],
-                                  "spacing": "none",
-                                  "margin": "none",
-                                  "backgroundColor": "#0b6fb9",
-                                  "cornerRadius": "md",
-                                  "borderWidth": "none",
-                                  "paddingEnd": "none",
-                                  "paddingStart": "none",
-                                  "action": {
-                                    "type": "uri",
-                                    "label": "View Profile",
-                                    "uri": `https://okanize.shopsthai.com/friends/profile?id=${payload.receiver_id}`
-                                  }
-                                }
-                              ],
-                              "spacing": "none",
-                              "margin": "md",
-                              "backgroundColor": "#FFFFFF"
                             }
                           ]
                         }
