@@ -1,7 +1,16 @@
 import { Router } from 'express';
 import { FriendServices } from '../module/FriendServices';
 import { User } from '../model/User';
-import queryString from 'query-string';
+// At the top of your file, declare the type but don't import
+let queryString: any;
+
+// At the beginning of your function or in an async initialization block
+async function initializeQueryString() {
+  queryString = await import('query-string');
+}
+
+// Make sure to call this before using queryString
+
 
 const router = Router();
 
@@ -9,6 +18,7 @@ const router = Router();
  * Handle Line webhook callbacks
  */
 router.post('/webhook', async (req, res) => {
+  await(initializeQueryString());
   try {
     // Line sends webhooks in a specific format
     const events = req.body.events;
@@ -49,22 +59,21 @@ async function handlePostback(event: any) {
       console.error('Unknown user for Line ID:', userId);
       return;
     }
-    
+
+    const senderId = parseInt(parsedData.sender_id as string);
     // Handle different actions
     switch (action) {
       case 'accept':
-        const senderId = parseInt(parsedData.sender_id as string);
         await FriendServices.acceptFriendRequest(user.user_id, senderId);
         
         // Send a confirmation message back to the user
-        await sendTextMessage(userId, 'Friend request accepted!');
+        await sendTextMessage(userId, senderId, 'Accepted');
         break;
         
       case 'decline':
-        const declineSenderId = parseInt(parsedData.sender_id as string);
         
         // Send a confirmation message back to the user
-        await sendTextMessage(userId, 'Friend request declined.');
+        await sendTextMessage(userId, senderId,'Declined');
         break;
         
 
@@ -80,14 +89,81 @@ async function handlePostback(event: any) {
 /**
  * Send a simple text message to a user via Line
  */
-async function sendTextMessage(lineUserId: string, text: string): Promise<void> {
+async function sendTextMessage(lineUserId: string, senderId: number, text: string): Promise<void> {
+    const sender = await User.findOne({ where: { user_id: senderId } });
+
+ 
   const messagePayload = {
     to: lineUserId,
     messages: [
-      {
-        type: 'text',
-        text: text
-      }
+        {
+            type: "flex",
+            altText: `Friend Request ${text}`,
+            contents: {
+                "type": "bubble",
+                "size": "giga",
+                "body": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "image",
+                              "url": `${sender?.profile_image_base64}`,
+                              "aspectMode": "cover",
+                              "size": "full"
+                            }
+                          ],
+                          "cornerRadius": "100px",
+                          "width": "72px",
+                          "height": "72px"
+                        },
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "text",
+                              "contents": [
+                                {
+                                  "type": "span",
+                                  "text": `You ${text} `,
+                                  "weight": "regular"
+                                },
+                                {
+                                  "type": "span",
+                                  "text": `${sender?.username} `,
+                                  "color": "#000000",
+                                  "weight": "bold"
+                                },
+                                {
+                                  "type": "span",
+                                  "text": "friend request"
+                                }
+                              ],
+                              "size": "sm",
+                              "wrap": true
+                            }
+                          ],
+                          "position": "relative",
+                          "justifyContent": "center"
+                        }
+                      ],
+                      "spacing": "xl",
+                      "paddingAll": "20px"
+                    }
+                  ],
+                  "paddingAll": "0px"
+                }
+              }
+        }
     ]
   };
   
