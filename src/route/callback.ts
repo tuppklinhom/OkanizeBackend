@@ -12,6 +12,7 @@ router.post('/webhook', async (req, res) => {
   try {
     // Line sends webhooks in a specific format
     const events = req.body.events;
+    console.log(events)
     
     // Process each event
     for (const event of events) {
