@@ -66,57 +66,42 @@ const performOCR = async (imagePath: string): Promise<{ name?: string; amount?: 
 };
   
 
-router.post("/receipt", upload.single("image"), async (req, res, next): Promise<void> => {
+router.post("/receipt",  async (req, res, next): Promise<void> => {
     try {
-        const { image } = req.body;
-        const uploadedFile = req.file;
-        let tempPath: string | null = null;
-    
-        // Ensure only one input method is provided
-        if ((image && uploadedFile) || (!image && !uploadedFile)) {
-            res.status(400).json({
-              error: "Provide either a base64 image in 'image' field OR a file upload, not both.",
-            });
-            return;
-          }
-    
-        if (image) {
-          // Process base64 image
-          const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-          const buffer = Buffer.from(base64Data, "base64");
-          tempPath = path.join(__dirname, "temp.png");
-          fs.writeFileSync(tempPath, buffer);
-        } else if (uploadedFile) {
-          // Process uploaded file
-          tempPath = uploadedFile.path;
+      
+      // Read image file and convert to base64
+      const base64String = req.body.image_base64;
+      const data = { base64_string: base64String, return_image: false, return_ocr: false}
+      
+      let returnRaw
+      try {
+        const response = await fetch("https://api.iapp.co.th/ocr/v3/receipt/base64", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': "demo"
+          },
+          body: JSON.stringify(data)
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`)
         }
-    
-        if (!tempPath) {
-          res.status(500).json({ error: "Image processing failed." });
-          return;
-        }
-    
-        // Perform OCR
-        const text = await performOCR(tempPath);
-    
-        // Delete temporary file
-        setTimeout(() => {
-            try {
-              if (fs.existsSync(tempPath)) {
-                fs.unlinkSync(tempPath);
-              } else {
-                console.error("File not found:", tempPath);
-              }
-            } catch (err) {
-              console.error("Error deleting file:", err);
-            }
-          }, 500);
-    
-        res.json({ text });
+        
+        returnRaw = await response.json()
       } catch (error) {
-        console.error("Error processing OCR:", error);
-        next(error);
+        throw error
       }
+      
+      if (!returnRaw || !returnRaw.processed || !returnRaw.processed.grandTotal) {
+        res.status(400).json({ message: "Error processing OCR" });
+      }
+      
+      res.json({ amount: returnRaw.processed.grandTotal });
+    } catch (error) {
+      console.error("Error processing OCR:", error);
+      next(error);
+    }
 })
 
 export default router;

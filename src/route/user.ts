@@ -2,9 +2,11 @@ import { Router } from 'express';
 import { Wallet } from '../model/Wallet';
 import { Category } from '../model/Category';
 import { Op } from 'sequelize';
+import { Transaction } from '../model/Transaction';
 import KeyPair from '../module/KeyPair';
 import jwt from 'jsonwebtoken';
 import { UserBudgetLimit } from '../model/UserBudgetLimit';
+import { parse } from 'path';
 
 const router = Router();
 
@@ -164,11 +166,71 @@ router.get('/wallet/query', KeyPair.requireAuth(),async (req, res, next): Promis
             return res.status(400).json({ message: 'Invalid token' });
         }
         const wallets = await Wallet.findAll({ where: { user_id: payloadData.userId } });
-        res.json(wallets);
+        
+        const walletWithSumPrice = await Promise.all(wallets.map(async (wallet) => {
+            const transactions = await Transaction.findAll({ where: { wallet_id: wallet.wallet_id } });
+            
+            const sumPrice = transactions.reduce((sum, transaction) => {
+                if (transaction.type === 'Expense') {
+                    return sum - parseFloat(transaction.amount as unknown as string);
+    
+                }else{
+                    return sum + parseFloat(transaction.amount as unknown as string);
+                }
+    
+            }, 0);
+
+            return {
+                ...wallet.dataValues,
+                sum_price: sumPrice
+            }
+        }))
+
+
+        res.json(walletWithSumPrice);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch wallets', details: error });
     }
 });
+
+
+// Query Wallets by ID
+router.get('/wallet/query/:id', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
+    try {
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        if (req.params.id == null || req.params.id == undefined || Number.isNaN(req.params.id)){
+            return res.status(400).json({ message: 'Invalid wallet id' });
+        }
+        const wallet = await Wallet.findOne({ where: { wallet_id: parseInt(req.params.id), user_id: payloadData.userId } });
+
+        if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
+
+        const transactions = await Transaction.findAll({ where: { wallet_id: wallet.wallet_id } });
+            
+        const sumPrice = transactions.reduce((sum, transaction) => {
+            if (transaction.type === 'Expense') {
+                return sum - parseFloat(transaction.amount as unknown as string);
+
+            }else{
+                return sum + parseFloat(transaction.amount as unknown as string);
+            }
+
+        }, 0);
+
+        res.json({
+            ...wallet.dataValues,
+            sum_price: sumPrice
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch wallets', details: error });
+    }
+});
+
 
 // Update Wallet
 router.patch('/wallet/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
