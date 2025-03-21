@@ -10,9 +10,9 @@ import { configureCors } from './cors-config';
 
 export const app = express();
 
-app.use(json())
+
 app.use(bodyParser.json({ limit: "10mb" })); // Support JSON body with base64 images
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 const apifunc = (req:any, res:any) => {
     res.status(200).json({
@@ -20,9 +20,6 @@ const apifunc = (req:any, res:any) => {
         message: 'api ok test deploy',
     })
 }
-
-app.get('/',apifunc)
-app.get('/api',apifunc)
 
 app.get('/health', (req, res) => {
     res.status(200).json({
