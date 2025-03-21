@@ -6,7 +6,7 @@ import { Wallet } from '../model/Wallet';
 import { UserBudgetLimit } from '../model/UserBudgetLimit';
 import { Category } from '../model/Category';
 
-export class TransactionWithNotification {
+export class TransactionServices {
     /**
      * Creates a transaction and processes a notification.
      * @param userId - The ID of the user creating the transaction.

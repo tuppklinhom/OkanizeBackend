@@ -145,13 +145,19 @@ router.post('/wallet/create', KeyPair.requireAuth(),async (req, res, next): Prom
             return res.status(400).json({ message: 'Invalid token' });
         }
 
-        const { walletName, walletType } = req.body;
+        const { walletName, walletType, initialAmount } = req.body;
 
         if (walletType != "Cash" && walletType != "Credis Card" && walletType != "Bank Transfer"){
             return res.status(400).json({message: "invalid wallet type"})
         }
+        if (typeof initialAmount != "number"){
+            return res.status(400).json({message: "invalid initial amount"})
+        }
+        
+        
         const wallet = await Wallet.create({ user_id: payloadData.userId, wallet_name: walletName, wallet_type: walletType});
-        res.status(201).json(wallet);
+        const transaction = await Transaction.create({ wallet_id: wallet.wallet_id, category_id: null, amount: initialAmount, type: "initial", is_sorted: true, is_paid: true, note: "Initial Amount For Wallet: " + walletName});
+        res.status(201).json({...wallet, sumPrice: initialAmount});
     } catch (error) {
         res.status(500).json({ error: 'Failed to create wallet', details: error });
     }

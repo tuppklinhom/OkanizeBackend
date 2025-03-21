@@ -94,7 +94,9 @@ router.get('/query', KeyPair.requireAuth() ,async (req, res, next): Promise<any>
 
             const groupMemberList = await GroupMember.findAll({ where: { space_id: group.space_id } });
             const groupMembers = await Promise.all(groupMemberList.map(async (member) => {
-                return await User.findOne({ where: { user_id: member.user_id }, attributes: ['username', 'line_id'] });
+
+            return await User.findOne({ where: { user_id: member.user_id }, attributes: ['username', 'profile_image_base64'] });
+
             }))
             if (!groupObj) {
                 return null

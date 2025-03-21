@@ -40,7 +40,8 @@ router.post('/login', async (req, res) => {
         if (!userObj) {
             //new user
             userObj = await User.create({
-                line_id: payloadBody.sub
+                line_id: payloadBody.sub,
+                profile_image_base64: payloadBody.picture
             })
 
             const wallet = await Wallet.create({
@@ -53,10 +54,14 @@ router.post('/login', async (req, res) => {
             await userObj.save()
 
             console.log('created new User', userObj.dataValues)
+        }else{
+            userObj.update({profile_image_base64: payloadBody.picture})
+            await userObj.save()
         }
         const userJSON = {
             userId: userObj.user_id,
             username: userObj.username,
+            profileImage: userObj.profile_image_base64,
             iat: Date.now(),
             exp: Date.now() + 1000 * 60 * 5,
         }
