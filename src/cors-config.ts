@@ -9,7 +9,7 @@ export function configureCors(app: Express): void {
   const corsOptions = {
     origin: 'https://okanize.shopsthai.com',
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'content-type', 'Authorization', 'authorization', 'Access-Token']
   };
 
