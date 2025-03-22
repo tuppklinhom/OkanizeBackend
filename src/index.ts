@@ -13,6 +13,7 @@ import { Transaction } from './model/Transaction';
 import { Wallet } from './model/Wallet';
 import { UserBudgetLimit } from './model/UserBudgetLimit';
 import { FriendList } from './model/FriendList';
+import { SchedulerService } from './module/ScheduleService';
 const PORT = parseInt(process.env.PORT || '3000');
 
 async function main(){
@@ -20,7 +21,7 @@ async function main(){
   .then(() => console.log('Database connection established'))
   .catch((err: Error) => console.error('Unable to connect to the database:', err));
   
-  
+  SchedulerService.initScheduledJobs();
 const models = [
     User,
     BudgetNotification,
