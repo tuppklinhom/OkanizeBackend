@@ -20,6 +20,8 @@ export class TransactionServices {
         type: 'Expense' | 'Income';
         receipt_image_base64?: string;
         date?: Date;
+        is_sorted?: boolean;
+        is_paid?: boolean;
     }): Promise<Transaction> {
         // Find the user
         const user = await User.findOne({ where: { user_id: userId } });
@@ -78,6 +80,8 @@ export class TransactionServices {
             type: transactionData.type,
             receipt_image_base64: transactionData.receipt_image_base64,
             date: transactionData.date? transactionData.date : new Date(),
+            is_sorted: transactionData.is_sorted? transactionData.is_sorted : false,
+            is_paid: transactionData.is_paid ?? true,
         });
 
         // Process the notification

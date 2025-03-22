@@ -354,7 +354,8 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         amount: eachMemberPrice,
                         date: currentTransaction.date,
                         type: 'Income',
-                        note: `Received split from ${userObj.username} for group transaction: ${groupTransaction.description}`
+                        note: `Received split from ${userObj.username} for group transaction: ${groupTransaction.description}`,
+                        is_paid: false
                     });
                 }
 
@@ -410,7 +411,8 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                             amount: splitSheet.amount,
                             date: currentTransaction.date,
                             type: 'Income',
-                            note: `Received split from ${userObj.username} for: ${groupTransaction.description}`
+                            note: `Received split from ${userObj.username} for: ${groupTransaction.description}`,
+                            is_paid: false
                         });
                     }
                 }

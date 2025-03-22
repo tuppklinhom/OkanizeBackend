@@ -100,7 +100,8 @@ export class SummaryService {
             [Op.between]: [startDate, endDate]
           },
           type: { [Op.in]: ['Income', 'Expense'] },
-          is_sorted: true
+          is_sorted: true,
+          is_paid: true
         }
       });
       
@@ -197,7 +198,8 @@ export class SummaryService {
             [Op.between]: [startDate, endDate]
           },
           type: 'Expense',
-          is_sorted: true
+          is_sorted: true,
+          is_paid: true
         }
       });
       
