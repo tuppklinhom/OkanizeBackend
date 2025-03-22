@@ -156,7 +156,7 @@ router.post('/wallet/create', KeyPair.requireAuth(),async (req, res, next): Prom
 
         const { walletName, walletType, initialAmount } = req.body;
 
-        if (walletType != "Cash" && walletType != "Credis Card" && walletType != "Bank Transfer"){
+        if (walletType != "Cash" && walletType != "Credit Card" && walletType != "Bank Transfer"){
             return res.status(400).json({message: "invalid wallet type"})
         }
         if (typeof initialAmount != "number"){
