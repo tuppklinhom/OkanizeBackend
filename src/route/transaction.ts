@@ -58,7 +58,8 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
                 wallet_id: wallet_id,
                 category_id: category_id,
                 note: note,
-                type: type
+                type: type,
+                receipt_image_base64: receipt_image_base64
             })
             return res.status(200).json(transaction)
     

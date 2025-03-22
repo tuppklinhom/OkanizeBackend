@@ -6,6 +6,7 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { User } from '../model/User';
 import { Transaction } from '../model/Transaction';
 import { GroupTransaction } from '../model/GroupTransaction';
+import { TransactionServices } from '../module/TransactionServices';
 
 const router = Router();    
 
@@ -149,7 +150,8 @@ router.post('/transaction/create', KeyPair.requireAuth() ,async (req, res, next)
             space_id: groupSpaceID,
             transaction_id: transaction.transaction_id,
             description: note,
-            split_member: {}
+            split_member: {},
+            paid_member: payloadData.userId
         })
 
         return res.status(200).json({
@@ -256,8 +258,8 @@ router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next)
 
 })
 
-router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<any>=> {
-    try{
+router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
+    try {
         const token = req.headers['access-token'] as string;
         const payloadData = jwt.decode(token);
         if (typeof payloadData === 'string' || !payloadData) {
@@ -265,87 +267,160 @@ router.post('/confirm', KeyPair.requireAuth() , async (req, res, next): Promise<
         }
 
         const { groupSpaceID } = req.body;
-        if (!groupSpaceID){
+        if (!groupSpaceID) {
             return res.status(400).json({ message: 'Invalid input' });
         }
 
         const groupSpace = await GroupSpace.findOne({ where: { space_id: groupSpaceID } });
-        if (!groupSpace){
+        if (!groupSpace) {
             return res.status(400).json({ message: 'Group not found' });
         }
 
-        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupSpace.space_id, user_id: payloadData.userId } }); 
-        if (!groupMemberObj || groupMemberObj.role !== 'Admin'){
+        const groupMemberObj = await GroupMember.findOne({ where: { space_id: groupSpace.space_id, user_id: payloadData.userId } });
+        if (!groupMemberObj || groupMemberObj.role !== 'Admin') {
             return res.status(400).json({ message: 'Invalid command' });
         }
 
-        const groupTransactions = await GroupTransaction.findAll({where: {space_id: groupSpace.space_id}})
-        const allMember = await GroupMember.findAll({where: {space_id: groupSpace.space_id}})
+        const groupTransactions = await GroupTransaction.findAll({ where: { space_id: groupSpace.space_id } });
+        const allMember = await GroupMember.findAll({ where: { space_id: groupSpace.space_id } });
 
         for (const groupTransaction of groupTransactions) {
-            const currentTransaction = await Transaction.findOne({where: {transaction_id: groupTransaction.transaction_id}})
-            if (!currentTransaction) {throw new Error("No Transaction")}
+            const currentTransaction = await Transaction.findOne({ where: { transaction_id: groupTransaction.transaction_id } });
+            if (!currentTransaction) {
+                throw new Error("No Transaction");
+            }
 
             if (!groupTransaction.split_member || Object.keys(groupTransaction.split_member).length === 0) {
-                console.log("yay")
+                console.log("yay");
                 let countMember = 0;
                 //auto split with all member
-                const memberIDList = allMember.map((member) =>{
-                    countMember += 1
-                    return member.user_id 
-                })
+                const memberIDList = allMember.map((member) => {
+                    countMember += 1;
+                    return member.user_id;
+                });
 
-                const eachMemberPrice = currentTransaction.amount / countMember
+                const eachMemberPrice = currentTransaction.amount / countMember;
 
-                for (const memberID of memberIDList){
-                    const userObj = await User.findByPk(memberID) 
-                    await Transaction.create({
-                        wallet_id: userObj?.default_wallet,
-                        category_id: userObj?.default_category,
+                // First, find the paid user once outside the loop
+                const paidUserObj = await User.findByPk(groupTransaction.paid_member);
+                if (!paidUserObj) {
+                    throw new Error(`Paid member with ID ${groupTransaction.paid_member} not found`);
+                }
+
+                // Create the expense transaction for the paid member
+                await TransactionServices.createTransactionWithNotification(paidUserObj.user_id,{
+                    wallet_id: paidUserObj.default_wallet,
+                    category_id: paidUserObj.default_category ? paidUserObj.default_category : undefined,
+                    amount: currentTransaction.amount,
+                    date: currentTransaction.date,
+                    type: 'Expense',
+                    note: `Paid in advance for group transaction: ${groupTransaction.description}`
+                });
+
+                // Loop through each member to create their transactions
+                for (const memberID of memberIDList) {
+                    // Skip the paid member since we already created their expense transaction
+                    if (memberID == groupTransaction.paid_member) {
+                        continue;
+                    }
+
+                    const userObj = await User.findByPk(memberID);
+                    if (!userObj) {
+                        console.warn(`Member with ID ${memberID} not found, skipping`);
+                        continue;
+                    }
+
+                    // Create expense transaction for the current member
+                    await TransactionServices.createTransactionWithNotification(userObj.user_id,{
+                        wallet_id: userObj.default_wallet,
+                        category_id: userObj.default_category ? userObj.default_category : undefined,
                         amount: eachMemberPrice,
                         date: currentTransaction.date,
                         type: 'Expense',
-                        note: groupTransaction.description
-                    })
-                }
+                        note: `Split from Group: ${groupTransaction.description}`
+                    });
 
-                await currentTransaction.destroy()
-                await groupTransaction.destroy()
-
-                await currentTransaction.save()
-                await groupTransaction.save()
-                
-            }else{  
-                const splitSheets = groupTransaction.split_member
-                console.log("nay")
-                for (const splitSheet of splitSheets as Array<SplitMember>){
-                    const userObj = await User.findByPk(splitSheet.userID) 
+                    // Create income transaction for the paid member
                     await Transaction.create({
-                        wallet_id: userObj?.default_wallet,
-                        category_id: userObj?.default_category,
-                        amount: splitSheet.amount,
+                        wallet_id: paidUserObj.default_wallet,
+                        category_id: paidUserObj.default_category,
+                        amount: eachMemberPrice,
                         date: currentTransaction.date,
-                        type: 'Expense',
-                        note: groupTransaction.description
-                    })
+                        type: 'Income',
+                        note: `Received split from ${userObj.username} for group transaction: ${groupTransaction.description}`
+                    });
                 }
-                await currentTransaction.destroy()
-                await groupTransaction.destroy()
 
-                await currentTransaction.save()
-                await groupTransaction.save()
+                // Delete the original transactions after creating the splits
+                await groupTransaction.destroy();
+                await currentTransaction.destroy();
+                
+            } else {
+                const splitSheets = groupTransaction.split_member;
 
+                // First, find the paid member
+                const paidMemberID = groupTransaction.paid_member;
+                const paidUserObj = await User.findByPk(paidMemberID);
+                if (!paidUserObj) {
+                    throw new Error(`Paid member with ID ${paidMemberID} not found`);
+                }
+                
+                // Process the split member transactions
+                for (const splitSheet of splitSheets as Array<SplitMember>) {
+                    const userObj = await User.findByPk(splitSheet.userID);
+                    
+                    if (!userObj) {
+                        console.warn(`User with ID ${splitSheet.userID} not found, skipping`);
+                        continue;
+                    }
+                
+                    if (userObj.user_id == paidMemberID) {
+                        // This is the paid member - create expense for full amount
+                        await TransactionServices.createTransactionWithNotification(userObj.user_id, {
+                            wallet_id: userObj.default_wallet,
+                            category_id: userObj.default_category ? userObj.default_category : undefined,
+                            amount: currentTransaction.amount,
+                            date: currentTransaction.date,
+                            type: 'Expense',
+                            note: `Paid in advance for group transaction: ${groupTransaction.description}`
+                        });
+                    } else {
+                        // This is another member
+                        // 1. Create expense transaction for this member with notification
+                        await TransactionServices.createTransactionWithNotification(userObj.user_id, {
+                            wallet_id: userObj.default_wallet,
+                            category_id: userObj.default_category ? userObj.default_category : undefined,
+                            amount: splitSheet.amount,
+                            date: currentTransaction.date,
+                            type: 'Expense',
+                            note: `Split from group: ${groupTransaction.description}`
+                        });
+                        
+                        // 2. Create income transaction for the paid member
+                        await Transaction.create({
+                            wallet_id: paidUserObj.default_wallet, // Important: This goes to paid member's wallet
+                            category_id: paidUserObj.default_category,
+                            amount: splitSheet.amount,
+                            date: currentTransaction.date,
+                            type: 'Income',
+                            note: `Received split from ${userObj.username} for: ${groupTransaction.description}`
+                        });
+                    }
+                }
+                
+                // Delete the original transactions after creating the splits
+                await groupTransaction.destroy();
+                await currentTransaction.destroy();
             }
         }
 
-        groupSpace.isClosed = true
-        await groupSpace.save()
-        res.status(200).json({status: "confirm success"})
-    }catch(error){
+        groupSpace.isClosed = true;
+        await groupSpace.save();
+        res.status(200).json({ status: "confirm success", groupSpace: groupSpace});
+    } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Internal server error' });
     }
+});
 
-
-})
 export default router;

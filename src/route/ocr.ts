@@ -28,7 +28,7 @@ router.post("/receipt",  async (req, res, next): Promise<void> => {
           method: 'POST',
           headers: {
             // No need to set Content-Type with FormData as it's set automatically
-            'apikey': "demo"
+            'apikey': "rspfbq3v8c04lzcqBbWvnHL1wmk5LZnp"
           },
           body: formData
         });

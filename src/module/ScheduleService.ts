@@ -11,53 +11,18 @@ export class SchedulerService {
    * Start all scheduled tasks
    */
   static initScheduledJobs(): void {
-    this.scheduleDailySummary();
     this.scheduleEndOfMonthSummary();
     console.log('All scheduled jobs initialized');
   }
 
-  /**
-   * Schedule daily summary messages to be sent at the end of each day
-   * Runs at 8:00 PM every day
-   */
-  static scheduleDailySummary(): void {
-    // Cron pattern: '0 20 * * *' = At 8:00 PM every day
-    cron.schedule('0 20 * * *', async () => {
-      console.log('Running daily summary job at', new Date().toISOString());
-      try {
-        // Get all active users
-        const users = await User.findAll();
-
-        console.log(`Found ${users.length} users to send daily summaries`);
-
-        // Send summaries to each user
-        for (const user of users) {
-          try {
-            await SummaryService.sendSummaryMessage(user.user_id);
-            console.log(`Successfully sent daily summary to user ${user.user_id}`);
-          } catch (error) {
-            console.error(`Failed to send daily summary to user ${user.user_id}:`, error);
-            // Continue with next user even if one fails
-          }
-        }
-
-        console.log('Daily summary job completed');
-      } catch (error) {
-        console.error('Error running daily summary job:', error);
-      }
-    }, {
-      scheduled: true,
-      timezone: "Asia/Bangkok" // Adjust timezone as needed
-    });
-  }
 
   /**
    * Schedule monthly summary messages to be sent at the end of each month
    * Runs at 8:00 PM on the last day of each month
    */
   static scheduleEndOfMonthSummary(): void {
-    // Cron pattern: '0 20 L * *' = At 8:00 PM on the last day of each month
-    cron.schedule('0 20 L * *', async () => {
+    // Cron pattern: '0 20 L * *' = At 8:00 PM on the last day of each month, now using every end of day
+    cron.schedule('0 20 * * *', async () => {
       console.log('Running monthly summary job at', new Date().toISOString());
       try {
         // Get all active users
