@@ -190,7 +190,8 @@ router.post('/transaction/query', KeyPair.requireAuth() ,async (req, res, next):
 
         const transactionList = await Promise.all(groupTransactionList.map(async (groupTransaction) => {
             const transaction = await Transaction.findOne({ where: { transaction_id: groupTransaction.transaction_id } });
-            return {groupTransactionID: groupTransaction.group_transaction_id, description: groupTransaction.description ,transaction: transaction?.dataValues, groupSplit: groupTransaction.split_member};
+            const user = await User.findOne({ where: { user_id: groupTransaction.paid_member } });
+            return {groupTransactionID: groupTransaction.group_transaction_id, description: groupTransaction.description ,transaction: transaction?.dataValues, groupSplit: groupTransaction.split_member, paidMember:{username: user?.username, profile: user?.profile_image_base64}};
         }))
         
 
@@ -229,6 +230,9 @@ router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next)
             return res.status(400).json({ message: 'Invalid command' });
         }
 
+        const groupMemberList = await GroupMember.findAll({ where: { space_id: groupTransaction.space_id } });
+        const groupMemberUserIDs = groupMemberList.map((member) => member.user_id); 
+
         if (!Array.isArray(splitMember)) {
             return res.status(400).json("Data must be an array.");
         }
@@ -236,6 +240,9 @@ router.post('/transaction/split', KeyPair.requireAuth() , async (req, res, next)
         for (const eachSplit of splitMember) {
             if (typeof eachSplit.userID !== 'number' || typeof eachSplit.amount !== 'number') {
                 return res.status(400).json({message: "Each item must have userID and amount as numbers."});
+            }
+            if (!groupMemberUserIDs.includes(eachSplit.userID)){
+                return res.status(400).json({message: `User with ID ${eachSplit.userID} not found.`});
             }
         }
         const totalAmount = splitMember.reduce((sum, eachSplit) => sum + eachSplit.amount, 0);
