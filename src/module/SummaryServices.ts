@@ -189,7 +189,7 @@ export class SummaryService {
       const wallets = await Wallet.findAll({ where: { user_id: userId } });
       const walletIds = wallets.map(wallet => wallet.wallet_id);
       
-      // Get expense transactions with categories
+      // Get expense transactions including those with null categories
       const transactions = await Transaction.findAll({
         where: {
           wallet_id: { [Op.in]: walletIds },
@@ -197,13 +197,12 @@ export class SummaryService {
             [Op.between]: [startDate, endDate]
           },
           type: 'Expense',
-          category_id: { [Op.not]: null },
           is_sorted: true
         }
       });
       
-      // Get all relevant categories
-      const categoryIds = [...new Set(transactions.map(t => t.category_id))].filter(id => id !== null) as number[];
+      // Get all relevant categories (non-null)
+      const categoryIds = [...new Set(transactions.map(t => t.category_id).filter(id => id !== null))] as number[];
       const categories = await Category.findAll({
         where: {
           category_id: { [Op.in]: categoryIds }
@@ -214,19 +213,21 @@ export class SummaryService {
       const categoryMap = new Map(categories.map(cat => [cat.category_id, cat]));
       
       // Group transactions by category
-      const categorySums: { [categoryId: number]: number } = {};
+      const categorySums: { [categoryId: string]: number } = {};
       let totalExpense = 0;
       
       for (const transaction of transactions) {
-        if (transaction.category_id === null) continue;
-        
         const amount = parseFloat(transaction.amount as unknown as string);
         
-        if (!categorySums[transaction.category_id]) {
-          categorySums[transaction.category_id] = 0;
+        // Use 'null' as string key for null category_id
+        const categoryKey = transaction.category_id !== null ? 
+          transaction.category_id.toString() : 'null';
+        
+        if (!categorySums[categoryKey]) {
+          categorySums[categoryKey] = 0;
         }
         
-        categorySums[transaction.category_id] += amount;
+        categorySums[categoryKey] += amount;
         totalExpense += amount;
       }
       
@@ -246,6 +247,16 @@ export class SummaryService {
       
       // Create summary
       const summary: CategorySummary[] = Object.entries(categorySums).map(([categoryId, amount], index) => {
+        // Special handling for null category
+        if (categoryId === 'null') {
+          return {
+            name: 'Others',
+            amount,
+            percentage: totalExpense > 0 ? (amount / totalExpense) * 100 : 0,
+            color: '#CCCCCC' // Gray color for Others category
+          };
+        }
+        
         const category = categoryMap.get(parseInt(categoryId));
         return {
           name: category ? category.name : 'Uncategorized',
