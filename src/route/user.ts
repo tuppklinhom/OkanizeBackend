@@ -98,17 +98,21 @@ router.patch('/category/update', KeyPair.requireAuth(),async (req, res, next): P
             name = category.name
         }
         if(!type){
-            budgetLimit = category.type
+            type = category.type
         }
         if(!imageBase64){
             imageBase64 = category.image_base64
         }
 
-        if(budgetLimit){
+        if(typeof budgetLimit == 'number'){
             if(budgetLimitObj){
-                await budgetLimitObj.update({budget_limit: budgetLimit})
-                await budgetLimit.save()
-            }else{
+                if(budgetLimit == 0){
+                    await budgetLimitObj.destroy()
+                }else{
+                    await budgetLimitObj.update({budget_limit: budgetLimit})
+                    await budgetLimitObj.save()
+                }
+            }else if (budgetLimit > 0){
                 budgetLimitObj = await UserBudgetLimit.create({category_id: categoryID, user_id: payloadData.userId, budget_limit: budgetLimit}) 
             }
         }
