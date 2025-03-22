@@ -98,7 +98,7 @@ router.patch('/category/update', KeyPair.requireAuth(),async (req, res, next): P
             name = category.name
         }
         if(!type){
-            budgetLimit = category.type
+            type = category.type
         }
         if(!imageBase64){
             imageBase64 = category.image_base64
