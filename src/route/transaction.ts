@@ -28,7 +28,7 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
                 return res.status(400).json({message: "User Not Found."})
             }
     
-            let {amount, note, wallet_id, category_id, type, receipt_image_base64} = req.body;
+            let {amount, note, wallet_id, category_id, type, receipt_image_base64, is_sorted, is_paid} = req.body;
     
             if (!amount) {
                 return res.status(400).json({ message: 'Invalid input amount' });
@@ -45,6 +45,12 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
             if (receipt_image_base64 && typeof receipt_image_base64 !== 'string') {
                 return res.status(400).json({ message: 'Invalid input receipt_image_base64' });
             }
+            if (is_sorted !== true && is_sorted !== false) {
+                is_sorted = false;
+            } 
+            if(is_paid !== true && is_paid !== false) {
+                is_paid = true;
+            }
 
             if (req.file) {
                 const filePath = req.file.path;
@@ -60,7 +66,9 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
                 category_id: category_id,
                 note: note,
                 type: type,
-                receipt_image_base64: receipt_image_base64
+                receipt_image_base64: receipt_image_base64,
+                is_sorted: is_sorted,
+                is_paid: is_paid
             })
             return res.status(200).json(transaction)
     
