@@ -7,6 +7,7 @@ import authRouter from './route/auth'
 import userRouter from './route/user'
 import friendRouter from './route/friend'
 import callbackRouter from './route/callback'
+import summaryRouter from './route/summary'
 import { configureCors } from './cors-config';
 
 
@@ -33,6 +34,7 @@ app.use('/api/transaction', transactionRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/user', userRouter)
 app.use('/api/friend', friendRouter)
+app.use('/api/summary', summaryRouter)
 
 app.use('*', (req, res, next) => {
     res.status(404)

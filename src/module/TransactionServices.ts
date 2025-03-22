@@ -170,6 +170,14 @@ export class TransactionServices {
      * @param transaction - The transaction to notify about.
      */
     static async processNotification(userId: number, transaction: Transaction, type: 'Warning' | 'Exceed' | 'Others', category: Category, budgetLimit: UserBudgetLimit, currentSpend: number): Promise<void> {
+        let headersMessage1, headersMessage2
+        if (type == "Warning"){
+           headersMessage1 = "ใกล้เกินงบแล้ว"
+           headersMessage2 = "การใช้จ่ายเกิน 80% ของงบที่ตั้งไว้แล้ว"
+        }else if (type == "Exceed"){
+           headersMessage1 = "เกินงบแล้ว"
+           headersMessage2 = "การใช้จ่ายเกินงบที่ตั้งไว้แล้ว"
+        }
         const notificationMessage = `A new transaction of ${transaction.amount} has been created.`;
 
         const user = await User.findOne({ where: { user_id: userId } });
@@ -186,14 +194,6 @@ export class TransactionServices {
             is_read: false
         });
 
-        let headersMessage1, headersMessage2
-        if (type == "Warning"){
-            headersMessage1 = "ใกล้เกินงบแล้ว"
-            headersMessage2 = "การใช้จ่ายเกิน 80% ของงบที่ตั้งไว้แล้ว"
-        }else if (type == "Exceed"){
-            headersMessage1 = "เกินงบแล้ว"
-            headersMessage2 = "การใช้จ่ายเกินงบที่ตั้งไว้แล้ว"
-        }
     
 
 
