@@ -9,6 +9,7 @@ import { Op, WhereOptions } from 'sequelize';
 import { isBooleanObject } from 'util/types';
 import { Wallet } from '../model/Wallet';
 import { TransactionServices } from '../module/TransactionServices';
+import { Category } from '../model/Category';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -123,10 +124,28 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
             return sum + parseFloat(transaction.amount as unknown as string);
         }, 0);
 
+        const transactionsWithNames = await Promise.all(transactions.map(async (transaction) => {
+            const wallet = await Wallet.findOne({where: {wallet_id: transaction.wallet_id}});
+            if(transaction.category_id){
+                const category = await Category.findOne({where: {category_id: transaction.category_id}});
+                return {
+                    ...transaction.toJSON(),
+                    wallet_name: wallet?.wallet_name,
+                    category_name: category?.name
+                }
+            }else{
+                return {
+                    ...transaction.toJSON(),
+                    wallet_name: wallet?.wallet_name
+                }
+
+            }
+        }
+        ));
 
         return res.status(200).json({
             sumPrice: sumPrice,
-            transactionsList: transactions
+            transactionsList: transactionsWithNames
         })
 
     }catch(error){
