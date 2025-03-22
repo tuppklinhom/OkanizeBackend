@@ -5,7 +5,6 @@ import { sequelize } from './database';
 import { User } from './model/User';
 import { BudgetNotification } from './model/BudgetNotification';
 import { Category } from './model/Category';
-import { Goal } from './model/Goal';
 import { GroupSpace } from './model/GroupSpace';
 import { GroupMember } from './model/GroupMember';
 import { GroupTransaction } from './model/GroupTransaction';
@@ -26,7 +25,6 @@ const models = [
     User,
     BudgetNotification,
     Category,
-    Goal,
     GroupSpace,
     GroupMember,
     GroupTransaction,
