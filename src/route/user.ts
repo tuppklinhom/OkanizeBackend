@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { Wallet } from '../model/Wallet';
 import { Category } from '../model/Category';
-import { Op } from 'sequelize';
+import { Op, WhereOptions } from 'sequelize';
 import { Transaction } from '../model/Transaction';
 import KeyPair from '../module/KeyPair';
 import jwt from 'jsonwebtoken';
 import { UserBudgetLimit } from '../model/UserBudgetLimit';
 import { parse } from 'path';
+import { Where } from 'sequelize/types/utils';
+import { User } from '../model/User';
 
 const router = Router();
 
@@ -48,7 +50,10 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
         if (typeof payloadData === 'string' || !payloadData) {
             return res.status(400).json({ message: 'Invalid token' });
         }
+
+        const isDefaultOnly = req.query.defaultOnly as string;
         
+        let whereClause: WhereOptions = {}
         const categories = await Category.findAll({
             where: {
                 [Op.or]: [{ user_id: payloadData.userId }, { user_id: null }]
@@ -280,6 +285,57 @@ router.delete('/wallet/delete', KeyPair.requireAuth(),async (req, res, next): Pr
         res.json({ message: 'Wallet deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: 'Failed to delete wallet', details: error });
+    }
+});
+
+router.patch('/profile', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
+    try {
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        let { defaultWallet, defaultCategory, Username } = req.body;
+        
+        const wallet = await Wallet.findOne({ where: { wallet_id: defaultWallet, user_id: payloadData.userId } });
+        if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
+
+        const category = await Category.findOne({ where: { category_id: defaultCategory, user_id:{[Op.or]: [payloadData.userId, null]}} });
+        if (!category) return res.status(404).json({ error: 'Category not found' });
+
+        const checkUsername = await User.findOne({where: {username: Username}})
+        if(checkUsername){
+            return res.status(400).json({message: "Username already exist"})
+        }
+
+        const user = await User.findOne({where: {user_id: payloadData.userId}})
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        await user.update({default_wallet: defaultWallet, default_category: defaultCategory, username: Username});
+        await user.save()
+
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update wallet', details: error });
+    }
+});
+
+router.get('/profile/:id', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
+    try {
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        
+        const user = await User.findOne({where: {user_id: req.params.id}})
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update wallet', details: error });
     }
 });
 

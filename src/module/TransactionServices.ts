@@ -18,6 +18,8 @@ export class TransactionServices {
         wallet_id?: number;
         category_id?: number;
         type: 'Expense' | 'Income';
+        receipt_image_base64?: string;
+        date?: Date;
     }): Promise<Transaction> {
         // Find the user
         const user = await User.findOne({ where: { user_id: userId } });
@@ -74,7 +76,8 @@ export class TransactionServices {
             wallet_id: wallet_id,
             category_id: category_id,
             type: transactionData.type,
-            date: new Date(),
+            receipt_image_base64: transactionData.receipt_image_base64,
+            date: transactionData.date? transactionData.date : new Date(),
         });
 
         // Process the notification

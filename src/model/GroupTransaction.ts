@@ -13,6 +13,7 @@ export class GroupTransaction extends Model<InferAttributes<GroupTransaction>, I
     declare transaction_id: number;
     declare description: string;
     declare split_member: object;
+    declare paid_member: number;
 }
 
 GroupTransaction.init(
@@ -38,6 +39,10 @@ GroupTransaction.init(
             type: DataTypes.JSON,
             allowNull: false,
         },
+        paid_member:{
+            type: DataTypes.INTEGER.UNSIGNED,
+            allowNull: false,
+        }
     },
     {
         sequelize,
