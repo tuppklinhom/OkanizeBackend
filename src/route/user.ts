@@ -51,13 +51,17 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
             return res.status(400).json({ message: 'Invalid token' });
         }
 
-        const isDefaultOnly = req.query.defaultOnly as string;
+        const isDefaultOnly = req.query.defaultOnly === 'true';
         
         let whereClause: WhereOptions = {}
+
+        if(isDefaultOnly){
+            whereClause = { user_id: null }
+        }else{
+            whereClause = { [Op.or]: [{ user_id: payloadData.userId }, { user_id: null }] }
+        }
         const categories = await Category.findAll({
-            where: {
-                [Op.or]: [{ user_id: payloadData.userId }, { user_id: null }]
-            }
+            where: whereClause
         });
 
         const categoriesWithBudgetLimit = await Promise.all(categories.map(async (category) => {
@@ -161,8 +165,8 @@ router.post('/wallet/create', KeyPair.requireAuth(),async (req, res, next): Prom
         
         
         const wallet = await Wallet.create({ user_id: payloadData.userId, wallet_name: walletName, wallet_type: walletType});
-        const transaction = await Transaction.create({ wallet_id: wallet.wallet_id, category_id: null, amount: initialAmount, type: "initial", is_sorted: true, is_paid: true, note: "Initial Amount For Wallet: " + walletName});
-        res.status(201).json({...wallet, sumPrice: initialAmount});
+        const transaction = await Transaction.create({ wallet_id: wallet.wallet_id, category_id: null, amount: initialAmount, type: "initial", is_sorted: true, is_paid: true, note: "Initial Amount For Wallet: " + walletName, date: new Date() });
+        res.status(201).json({...wallet.dataValues, sumPrice: initialAmount});
     } catch (error) {
         res.status(500).json({ error: 'Failed to create wallet', details: error });
     }
@@ -296,23 +300,29 @@ router.patch('/profile', KeyPair.requireAuth(),async (req, res, next): Promise<a
             return res.status(400).json({ message: 'Invalid token' });
         }
 
-        let { defaultWallet, defaultCategory, Username } = req.body;
-        
-        const wallet = await Wallet.findOne({ where: { wallet_id: defaultWallet, user_id: payloadData.userId } });
-        if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
+        let { defaultWallet, defaultCategory, username } = req.body;
 
-        const category = await Category.findOne({ where: { category_id: defaultCategory, user_id:{[Op.or]: [payloadData.userId, null]}} });
-        if (!category) return res.status(404).json({ error: 'Category not found' });
+        if(defaultWallet){
+            const wallet = await Wallet.findOne({ where: { wallet_id: defaultWallet, user_id: payloadData.userId } });
+            if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
+        }
 
-        const checkUsername = await User.findOne({where: {username: Username}})
-        if(checkUsername){
-            return res.status(400).json({message: "Username already exist"})
+        if(defaultCategory){
+            const category = await Category.findOne({ where: { category_id: defaultCategory, user_id:{[Op.or]: [payloadData.userId, null]}} });
+            if (!category) return res.status(404).json({ error: 'Category not found' });
+        }
+
+        if(username){
+            const checkUsername = await User.findOne({where: {username: username}})
+            if(checkUsername){
+                return res.status(400).json({message: "Username already exist"})
+            }
         }
 
         const user = await User.findOne({where: {user_id: payloadData.userId}})
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        await user.update({default_wallet: defaultWallet, default_category: defaultCategory, username: Username});
+        await user.update({default_wallet: defaultWallet, default_category: defaultCategory, username: username});
         await user.save()
 
         res.json(user);
