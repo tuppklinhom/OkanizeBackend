@@ -7,7 +7,13 @@ import { Express } from 'express';
  */
 export function configureCors(app: Express): void {
   const corsOptions = {
-    origin: 'https://okanize.shopsthai.com',
+    origin: (origin, callback) => {
+      if (!origin || origin === 'https://okanize.shopsthai.com' || origin === 'https://okanize-dev.shopsthai.com') {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
     allowedHeaders: ['Content-Type', 'content-type', 'Authorization', 'authorization', 'Access-Token']

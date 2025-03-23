@@ -5,3 +5,4 @@ logs
 buffer/*
 !buffer/.gitkeep
 *.pem
+.qodo
