@@ -89,39 +89,67 @@ router.post('/category/update', KeyPair.requireAuth(),async (req, res, next): Pr
 
         let { categoryID, name, budgetLimit, type, imageBase64 } = req.body;
 
-        const category = await Category.findOne({ where: { category_id: categoryID, user_id: payloadData.userId } });
-        let budgetLimitObj =  await UserBudgetLimit.findOne({where: { category_id: categoryID, user_id: payloadData.userId }})
+        // First, check if this is a user category or a default category
+        const userCategory = await Category.findOne({ 
+            where: { category_id: categoryID, user_id: payloadData.userId } 
+        });
 
-        if (!category) return res.status(404).json({ error: 'Category not found' });
+        const defaultCategory = await Category.findOne({ 
+            where: { category_id: categoryID, user_id: null } as any // Using 'as any' to bypass TypeScript error
+        });
 
-        if(!name){
-            name = category.name
-        }
-        if(!type){
-            type = category.type
-        }
-        if(!imageBase64){
-            imageBase64 = category.image_base64
+        // Get the budget limit regardless of category type
+        let budgetLimitObj = await UserBudgetLimit.findOne({
+            where: { category_id: categoryID, user_id: payloadData.userId }
+        });
+
+        // If neither user category nor default category exists, return error
+        if (!userCategory && !defaultCategory) {
+            return res.status(404).json({ error: 'Category not found' });
         }
 
-        if(typeof budgetLimit == 'number'){
-            if(budgetLimitObj){
-                if(budgetLimit == 0){
-                    await budgetLimitObj.destroy()
-                }else{
-                    await budgetLimitObj.update({budget_limit: budgetLimit})
-                    await budgetLimitObj.save()
+        // Get the category to use (either user or default)
+        const category = userCategory || defaultCategory;
+
+        // Handle budget limit changes (for both user and default categories)
+        if (typeof budgetLimit === 'number') {
+            if (budgetLimitObj) {
+                if (budgetLimit === 0) {
+                    await budgetLimitObj.destroy();
+                    budgetLimitObj = null;
+                } else {
+                    await budgetLimitObj.update({ budget_limit: budgetLimit });
+                    await budgetLimitObj.save();
                 }
-            }else if (budgetLimit > 0){
-                budgetLimitObj = await UserBudgetLimit.create({category_id: categoryID, user_id: payloadData.userId, budget_limit: budgetLimit}) 
+            } else if (budgetLimit > 0) {
+                budgetLimitObj = await UserBudgetLimit.create({
+                    category_id: categoryID,
+                    user_id: payloadData.userId,
+                    budget_limit: budgetLimit
+                });
             }
         }
 
-        await category.update({ name: name, type: type,image_base64: imageBase64 });
-        await category.save()
+        // Only update the category itself if it's a user category
+        if (userCategory) {
+            if (!name) {
+                name = category?.name;
+            }
+            if (!type) {
+                type = category?.type;
+            }
+            if (!imageBase64) {
+                imageBase64 = category?.image_base64;
+            }
+        
+            await userCategory.update({ name, type, image_base64: imageBase64 });
+            await userCategory.save();
+        }
+
+        // Return the category data with budget_limit
         res.json({
-           ...category.dataValues,
-           budget_limit: budgetLimitObj?  budgetLimitObj.budget_limit : 0 
+            ...category?.dataValues,
+            budget_limit: budgetLimitObj ? budgetLimitObj.budget_limit : 0
         });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update category', details: error });
