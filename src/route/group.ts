@@ -402,7 +402,8 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                             amount: splitSheet.amount,
                             date: currentTransaction.date,
                             type: 'Expense',
-                            note: `Split from group: ${groupTransaction.description}`
+                            note: `Split from group: ${groupTransaction.description}`,
+                            is_paid: false
                         });
                         
                         // 2. Create income transaction for the paid member
