@@ -87,7 +87,7 @@ router.post('/category/update', KeyPair.requireAuth(),async (req, res, next): Pr
             return res.status(400).json({ message: 'Invalid token' });
         }
 
-        let { categoryID, name, budgetLimit, type, imageBase64 } = req.body;
+        let { categoryID, name, budget_limit, type, imageBase64 } = req.body;
 
         // First, check if this is a user category or a default category
         const userCategory = await Category.findOne({ 
@@ -112,20 +112,20 @@ router.post('/category/update', KeyPair.requireAuth(),async (req, res, next): Pr
         const category = userCategory || defaultCategory;
 
         // Handle budget limit changes (for both user and default categories)
-        if (typeof budgetLimit === 'number') {
+        if (typeof budget_limit === 'number') {
             if (budgetLimitObj) {
-                if (budgetLimit === 0) {
+                if (budget_limit === 0) {
                     await budgetLimitObj.destroy();
                     budgetLimitObj = null;
                 } else {
-                    await budgetLimitObj.update({ budget_limit: budgetLimit });
+                    await budgetLimitObj.update({ budget_limit: budget_limit });
                     await budgetLimitObj.save();
                 }
-            } else if (budgetLimit > 0) {
+            } else if (budget_limit > 0) {
                 budgetLimitObj = await UserBudgetLimit.create({
                     category_id: categoryID,
                     user_id: payloadData.userId,
-                    budget_limit: budgetLimit
+                    budget_limit: budget_limit
                 });
             }
         }
