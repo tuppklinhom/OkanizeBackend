@@ -79,7 +79,7 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
 });
 
 // Update Category
-router.patch('/category/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
+router.post('/category/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
     try {
         const token = req.headers['access-token'] as string;
         const payloadData = jwt.decode(token);
@@ -252,7 +252,7 @@ router.get('/wallet/query/:id', KeyPair.requireAuth(),async (req, res, next): Pr
 
 
 // Update Wallet
-router.patch('/wallet/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
+router.post('/wallet/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
     try {
         const token = req.headers['access-token'] as string;
         const payloadData = jwt.decode(token);
@@ -296,7 +296,7 @@ router.delete('/wallet/delete', KeyPair.requireAuth(),async (req, res, next): Pr
     }
 });
 
-router.patch('/profile', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
+router.post('/profile', KeyPair.requireAuth(),async (req, res, next): Promise<any> =>{
     try {
         const token = req.headers['access-token'] as string;
         const payloadData = jwt.decode(token);

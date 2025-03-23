@@ -163,7 +163,7 @@ router.post('/query', KeyPair.requireAuth(),async (req, res, next): Promise<any>
 
 })
 
-router.patch('/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> => {
+router.post('/update', KeyPair.requireAuth(),async (req, res, next): Promise<any> => {
     try{
         const token = req.headers['access-token'] as string;
         const payloadData = jwt.decode(token);
