@@ -9,7 +9,7 @@ import { sequelize } from '../database';
 
 export class Category extends Model<InferAttributes<Category>, InferCreationAttributes<Category>> {
     declare category_id: CreationOptional<number>;
-    declare user_id: number;
+    declare user_id: number | null;
     declare name: CreationOptional<string>;
     declare image_base64: string;
     declare type: 'Income' | 'Expense'
