@@ -7,6 +7,8 @@ import { User } from '../model/User';
 import { Transaction } from '../model/Transaction';
 import { GroupTransaction } from '../model/GroupTransaction';
 import { TransactionServices } from '../module/TransactionServices';
+import { SummaryGroupTransaction } from '../model/SummaryGroupTransaction';
+import { Op } from 'sequelize';
 
 const router = Router();    
 
@@ -291,6 +293,18 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
 
         const groupTransactions = await GroupTransaction.findAll({ where: { space_id: groupSpace.space_id } });
         const allMember = await GroupMember.findAll({ where: { space_id: groupSpace.space_id } });
+        
+        // Track balances: who paid and who owes
+        const balances = new Map<number, number>(); // userId -> balance (positive: is owed money, negative: owes money)
+        const expenseTransactionMap = new Map<number, number[]>(); // userId -> list of expense transaction IDs
+        const incomeTransactionMap = new Map<number, number[]>(); // userId -> list of income transaction IDs
+        
+        // Initialize balances and transaction maps for all members
+        for (const member of allMember) {
+            balances.set(member.user_id, 0);
+            expenseTransactionMap.set(member.user_id, []);
+            incomeTransactionMap.set(member.user_id, []);
+        }
 
         for (const groupTransaction of groupTransactions) {
             const currentTransaction = await Transaction.findOne({ where: { transaction_id: groupTransaction.transaction_id } });
@@ -298,136 +312,189 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 throw new Error("No Transaction");
             }
 
+            const paidMemberID = groupTransaction.paid_member;
+            const transactionAmount = parseFloat(currentTransaction.amount as unknown as string);
+            const paidUserObj = await User.findByPk(paidMemberID);
+            
+            if (!paidUserObj) {
+                throw new Error(`Paid member with ID ${paidMemberID} not found`);
+            }
+
+            // Update balance for payer (they paid the full amount)
+            balances.set(paidMemberID, (balances.get(paidMemberID) || 0) + transactionAmount);
+
             if (!groupTransaction.split_member || Object.keys(groupTransaction.split_member).length === 0) {
-                console.log("yay");
-                let countMember = 0;
-                //auto split with all member
-                const memberIDList = allMember.map((member) => {
-                    countMember += 1;
-                    return member.user_id;
-                });
+                // Auto-split with all members equally
+                const memberCount = allMember.length;
+                const eachMemberAmount = transactionAmount / memberCount;
 
-                const eachMemberPrice = currentTransaction.amount / countMember;
-
-                // First, find the paid user once outside the loop
-                const paidUserObj = await User.findByPk(groupTransaction.paid_member);
-                if (!paidUserObj) {
-                    throw new Error(`Paid member with ID ${groupTransaction.paid_member} not found`);
-                }
-
-                // Create the expense transaction for the paid member
-                await TransactionServices.createTransactionWithNotification(paidUserObj.user_id,{
+                // Create expense transaction for the paid member
+                await TransactionServices.createTransactionWithNotification(paidUserObj.user_id, {
                     wallet_id: paidUserObj.default_wallet,
                     category_id: paidUserObj.default_category ? paidUserObj.default_category : undefined,
-                    amount: currentTransaction.amount,
+                    amount: transactionAmount,
                     date: currentTransaction.date,
                     type: 'Expense',
                     note: `Paid in advance for group transaction: ${groupTransaction.description}`
                 });
 
-                // Loop through each member to create their transactions
-                for (const memberID of memberIDList) {
-                    // Skip the paid member since we already created their expense transaction
-                    if (memberID == groupTransaction.paid_member) {
-                        continue;
-                    }
+                // For each member, adjust their balance (they owe their share)
+                for (const member of allMember) {
+                    if (member.user_id === paidMemberID) continue; // Skip the payer
+                    
+                    const userObj = await User.findByPk(member.user_id);
+                    if (!userObj) continue;
 
-                    const userObj = await User.findByPk(memberID);
-                    if (!userObj) {
-                        console.warn(`Member with ID ${memberID} not found, skipping`);
-                        continue;
-                    }
+                    // Update balance for this member (they owe their share)
+                    balances.set(member.user_id, (balances.get(member.user_id) || 0) - eachMemberAmount);
 
                     // Create expense transaction for the current member
-                    await TransactionServices.createTransactionWithNotification(userObj.user_id,{
+                    const expenseTransaction = await TransactionServices.createTransactionWithNotification(userObj.user_id, {
                         wallet_id: userObj.default_wallet,
                         category_id: userObj.default_category ? userObj.default_category : undefined,
-                        amount: eachMemberPrice,
+                        amount: eachMemberAmount,
                         date: currentTransaction.date,
                         type: 'Expense',
                         note: `Split from Group: ${groupTransaction.description}`
                     });
 
                     // Create income transaction for the paid member
-                    await Transaction.create({
+                    const incomeTransaction = await Transaction.create({
                         wallet_id: paidUserObj.default_wallet,
                         category_id: paidUserObj.default_category,
-                        amount: eachMemberPrice,
+                        amount: eachMemberAmount,
                         date: currentTransaction.date,
                         type: 'Income',
                         note: `Received split from ${userObj.username} for group transaction: ${groupTransaction.description}`,
                         is_paid: false
                     });
-                }
-
-                // Delete the original transactions after creating the splits
-                await groupTransaction.destroy();
-                await currentTransaction.destroy();
-                
-            } else {
-                const splitSheets = groupTransaction.split_member;
-
-                // First, find the paid member
-                const paidMemberID = groupTransaction.paid_member;
-                const paidUserObj = await User.findByPk(paidMemberID);
-                if (!paidUserObj) {
-                    throw new Error(`Paid member with ID ${paidMemberID} not found`);
-                }
-                
-                // Process the split member transactions
-                for (const splitSheet of splitSheets as Array<SplitMember>) {
-                    const userObj = await User.findByPk(splitSheet.userID);
                     
-                    if (!userObj) {
-                        console.warn(`User with ID ${splitSheet.userID} not found, skipping`);
-                        continue;
-                    }
-                
-                    if (userObj.user_id == paidMemberID) {
-                        // This is the paid member - create expense for full amount
-                        await TransactionServices.createTransactionWithNotification(userObj.user_id, {
-                            wallet_id: userObj.default_wallet,
-                            category_id: userObj.default_category ? userObj.default_category : undefined,
-                            amount: currentTransaction.amount,
-                            date: currentTransaction.date,
-                            type: 'Expense',
-                            note: `Paid in advance for group transaction: ${groupTransaction.description}`
-                        });
-                    } else {
-                        // This is another member
-                        // 1. Create expense transaction for this member with notification
-                        await TransactionServices.createTransactionWithNotification(userObj.user_id, {
-                            wallet_id: userObj.default_wallet,
-                            category_id: userObj.default_category ? userObj.default_category : undefined,
-                            amount: splitSheet.amount,
-                            date: currentTransaction.date,
-                            type: 'Expense',
-                            note: `Split from group: ${groupTransaction.description}`,
-                            is_paid: false
-                        });
-                        
-                        // 2. Create income transaction for the paid member
-                        await Transaction.create({
-                            wallet_id: paidUserObj.default_wallet, // Important: This goes to paid member's wallet
-                            category_id: paidUserObj.default_category,
-                            amount: splitSheet.amount,
-                            date: currentTransaction.date,
-                            type: 'Income',
-                            note: `Received split from ${userObj.username} for: ${groupTransaction.description}`,
-                            is_paid: false
-                        });
-                    }
+                    // Track the created transaction IDs
+                    const memberExpenseTransactions = expenseTransactionMap.get(member.user_id) || [];
+                    memberExpenseTransactions.push(expenseTransaction.transaction_id);
+                    expenseTransactionMap.set(member.user_id, memberExpenseTransactions);
+                    
+                    const paidMemberIncomeTransactions = incomeTransactionMap.get(paidMemberID) || [];
+                    paidMemberIncomeTransactions.push(incomeTransaction.transaction_id);
+                    incomeTransactionMap.set(paidMemberID, paidMemberIncomeTransactions);
                 }
+            } else {
+                // Handle custom split
+                const splitSheets = groupTransaction.split_member as Array<SplitMember>;
                 
-                // Delete the original transactions after creating the splits
-                await groupTransaction.destroy();
-                await currentTransaction.destroy();
+                // Create expense transaction for the paid member
+                await TransactionServices.createTransactionWithNotification(paidUserObj.user_id, {
+                    wallet_id: paidUserObj.default_wallet,
+                    category_id: paidUserObj.default_category ? paidUserObj.default_category : undefined,
+                    amount: transactionAmount,
+                    date: currentTransaction.date,
+                    type: 'Expense',
+                    note: `Paid in advance for group transaction: ${groupTransaction.description}`
+                });
+                
+                // Process each member's split amount
+                for (const splitSheet of splitSheets) {
+                    const userObj = await User.findByPk(splitSheet.userID);
+                    if (!userObj) continue;
+
+                    // Skip the payer (they don't owe themselves)
+                    if (userObj.user_id === paidMemberID) continue;
+
+                    // Update balance for this member (they owe their share)
+                    balances.set(splitSheet.userID, (balances.get(splitSheet.userID) || 0) - splitSheet.amount);
+
+                    // Create expense transaction for the current member
+                    const expenseTransaction = await TransactionServices.createTransactionWithNotification(userObj.user_id, {
+                        wallet_id: userObj.default_wallet,
+                        category_id: userObj.default_category ? userObj.default_category : undefined,
+                        amount: splitSheet.amount,
+                        date: currentTransaction.date,
+                        type: 'Expense',
+                        note: `Split from group: ${groupTransaction.description}`,
+                        is_paid: false
+                    });
+                    
+                    // Create income transaction for the paid member
+                    const incomeTransaction = await Transaction.create({
+                        wallet_id: paidUserObj.default_wallet,
+                        category_id: paidUserObj.default_category,
+                        amount: splitSheet.amount,
+                        date: currentTransaction.date,
+                        type: 'Income',
+                        note: `Received split from ${userObj.username} for: ${groupTransaction.description}`,
+                        is_paid: false
+                    });
+                    
+                    // Track the created transaction IDs
+                    const memberExpenseTransactions = expenseTransactionMap.get(splitSheet.userID) || [];
+                    memberExpenseTransactions.push(expenseTransaction.transaction_id);
+                    expenseTransactionMap.set(splitSheet.userID, memberExpenseTransactions);
+                    
+                    const paidMemberIncomeTransactions = incomeTransactionMap.get(paidMemberID) || [];
+                    paidMemberIncomeTransactions.push(incomeTransaction.transaction_id);
+                    incomeTransactionMap.set(paidMemberID, paidMemberIncomeTransactions)
+                }
+            }
+            
+            // Delete the original transaction after processing
+            await groupTransaction.destroy();
+            await currentTransaction.destroy();
+        }
+        
+        // Create SummaryGroupTransaction records for net balances
+        const debtors = Array.from(balances.entries())
+            .filter(([_, balance]) => balance < 0)  // People who owe money (negative balance)
+            .sort((a, b) => a[1] - b[1]);          // Sort by balance (most negative first)
+            
+        const creditors = Array.from(balances.entries())
+            .filter(([_, balance]) => balance > 0)  // People who are owed money (positive balance)
+            .sort((a, b) => b[1] - a[1]);          // Sort by balance (most positive first)
+        
+        // Optimization: Simplify payments by matching debtors to creditors
+        let debtorIndex = 0;
+        let creditorIndex = 0;
+        
+        while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+            const [debtorId, debtorBalance] = debtors[debtorIndex];
+            const [creditorId, creditorBalance] = creditors[creditorIndex];
+            
+            const amountToTransfer = Math.min(Math.abs(debtorBalance), creditorBalance);
+            
+            if (amountToTransfer > 0) {
+                // Get the transaction IDs from our maps
+                const debtorTransactionIds = expenseTransactionMap.get(debtorId) || [];
+                const creditorTransactionIds = incomeTransactionMap.get(creditorId) || [];
+                
+                // Create summary record: debtor needs to pay creditor
+                await SummaryGroupTransaction.create({
+                    user_id: debtorId,             // Person who needs to pay
+                    target_id: creditorId,         // Person who receives payment
+                    transaction_ids: {
+                        debtor: debtorTransactionIds,
+                        creditor: creditorTransactionIds
+                    },
+                    description: `Payment for group: ${groupSpace.name}`,
+                    amount: amountToTransfer
+                });
+                
+                // Update balances
+                debtors[debtorIndex][1] += amountToTransfer;
+                creditors[creditorIndex][1] -= amountToTransfer;
+                
+                // Move to next person if balance is settled
+                if (Math.abs(debtors[debtorIndex][1]) < 0.01) debtorIndex++;
+                if (creditors[creditorIndex][1] < 0.01) creditorIndex++;
             }
         }
-
+        
+        // Mark group as closed
         groupSpace.isClosed = true;
         await groupSpace.save();
-        res.status(200).json({ status: "confirm success", groupSpace: groupSpace});
+        
+        res.status(200).json({ 
+            status: "confirm success", 
+            groupSpace: groupSpace
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Internal server error' });
