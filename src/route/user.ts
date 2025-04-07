@@ -9,6 +9,7 @@ import { UserBudgetLimit } from '../model/UserBudgetLimit';
 import { parse } from 'path';
 import { Where } from 'sequelize/types/utils';
 import { User } from '../model/User';
+import { sequelize } from '../database';
 
 const router = Router();
 
@@ -61,7 +62,10 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
             whereClause = { [Op.or]: [{ user_id: payloadData.userId }, { user_id: null }] }
         }
         const categories = await Category.findAll({
-            where: whereClause
+            where: whereClause,
+            order: [
+                [sequelize.literal('COALESCE(CategoryCount.count, 0)'), 'DESC'] // Sort by count descending
+            ],
         });
 
         const categoriesWithBudgetLimit = await Promise.all(categories.map(async (category) => {

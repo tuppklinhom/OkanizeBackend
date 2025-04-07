@@ -1,7 +1,7 @@
 import { response, Router } from 'express';
 import { Transaction } from '../model/Transaction';
 import KeyPair from '../module/KeyPair';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import multer from 'multer';
 import fs from 'fs'
 import { User } from '../model/User';
@@ -10,6 +10,7 @@ import { isBooleanObject } from 'util/types';
 import { Wallet } from '../model/Wallet';
 import { TransactionServices } from '../module/TransactionServices';
 import { Category } from '../model/Category';
+import { SummaryGroupTransaction } from '../model/SummaryGroupTransaction';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -265,5 +266,234 @@ router.delete('/delete', KeyPair.requireAuth(),async (req, res, next): Promise<a
     }
 
 })
+
+router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
+    try {
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        const { userId } = payloadData as JwtPayload;
+        const { summaryId, asDebtor, asCreditor } = req.body;
+
+        let summaryTransactions = [];
+
+        // Query by specific summary ID if provided
+        if (summaryId) {
+            const summary = await SummaryGroupTransaction.findOne({ 
+                where: { id: summaryId }
+            });
+            
+            if (!summary) {
+                return res.status(404).json({ message: 'Summary transaction not found' });
+            }
+            
+            // Only allow access if the user is either the debtor or creditor
+            if (summary.user_id !== userId && summary.target_id !== userId) {
+                return res.status(403).json({ message: 'Unauthorized to view this summary' });
+            }
+            
+            summaryTransactions.push(summary);
+        } else {
+            // Query by user's role in the transactions
+            let whereClause = {};
+            
+            if (asDebtor === true && asCreditor === true) {
+                // User wants to see transactions where they are either debtor or creditor
+                whereClause = {
+                    [Op.or]: [
+                        { user_id: userId },   // As debtor
+                        { target_id: userId }  // As creditor
+                    ]
+                };
+            } else if (asDebtor === true) {
+                // User wants to see only transactions where they are the debtor
+                whereClause = { user_id: userId };
+            } else if (asCreditor === true) {
+                // User wants to see only transactions where they are the creditor
+                whereClause = { target_id: userId };
+            } else {
+                // Default: show all transactions the user is involved in
+                whereClause = {
+                    [Op.or]: [
+                        { user_id: userId },
+                        { target_id: userId }
+                    ]
+                };
+            }
+            
+            summaryTransactions = await SummaryGroupTransaction.findAll({
+                where: whereClause,
+                order: [['createdAt', 'DESC']]
+            });
+        }
+        
+        // Enrich the summary transactions with user information and transaction details
+        const enrichedSummaryTransactions = await Promise.all(summaryTransactions.map(async (summary) => {
+            // Get debtor information
+            const debtor = await User.findOne({ 
+                where: { user_id: summary.user_id },
+                attributes: ['user_id', 'username', 'profile_image_base64'] 
+            });
+            
+            // Get creditor information
+            const creditor = await User.findOne({ 
+                where: { user_id: summary.target_id },
+                attributes: ['user_id', 'username', 'profile_image_base64']
+            });
+            
+            // Get associated transaction IDs
+            const transactionIds = summary.transaction_ids as { debtor: number[], creditor: number[] };
+            
+            // Fetch transaction details for both debtor and creditor
+            let debtorTransactions: Transaction[] = [];
+            let creditorTransactions:Transaction[]  = [];
+            
+            if (transactionIds.debtor && transactionIds.debtor.length > 0) {
+                debtorTransactions = await Transaction.findAll({
+                    where: { 
+                        transaction_id: { [Op.in]: transactionIds.debtor }
+                    }
+                });
+            }
+            
+            if (transactionIds.creditor && transactionIds.creditor.length > 0) {
+                creditorTransactions = await Transaction.findAll({
+                    where: { 
+                        transaction_id: { [Op.in]: transactionIds.creditor }
+                    }
+                });
+            }
+            
+            // Calculate payment status based on related transactions
+            const isPaid = debtorTransactions.every(transaction => transaction.is_paid);
+            
+            return {
+                id: summary.id,
+                description: summary.description,
+                amount: summary.amount,
+                status: isPaid ? 'Paid' : 'Pending',
+                debtor: {
+                    id: debtor?.user_id,
+                    username: debtor?.username,
+                    profile: debtor?.profile_image_base64
+                },
+                creditor: {
+                    id: creditor?.user_id,
+                    username: creditor?.username,
+                    profile: creditor?.profile_image_base64
+                },
+                transactions: {
+                    debtor: debtorTransactions.map(t => ({
+                        id: t.transaction_id,
+                        amount: t.amount,
+                        date: t.date,
+                        note: t.note,
+                        isPaid: t.is_paid
+                    })),
+                    creditor: creditorTransactions.map(t => ({
+                        id: t.transaction_id,
+                        amount: t.amount,
+                        date: t.date,
+                        note: t.note,
+                        isPaid: t.is_paid
+                    }))
+                }
+            };
+        }));
+        
+        return res.status(200).json(enrichedSummaryTransactions);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+// Add this route to your group.ts file
+
+router.post('/summary/mark_paid', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
+    try {
+        const token = req.headers['access-token'] as string;
+        const payloadData = jwt.decode(token);
+        if (typeof payloadData === 'string' || !payloadData) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        const { userId } = payloadData as JwtPayload;
+        const { summaryId } = req.body;
+
+        if (!summaryId) {
+            return res.status(400).json({ message: 'Summary ID is required' });
+        }
+
+        // Find the summary transaction
+        const summary = await SummaryGroupTransaction.findOne({
+            where: { id: summaryId }
+        });
+
+        if (!summary) {
+            return res.status(404).json({ message: 'Summary transaction not found' });
+        }
+
+        // Determine if the user is the debtor or creditor
+        const isDebtor = summary.user_id === userId;
+        const isCreditor = summary.target_id === userId;
+
+        if (!isDebtor && !isCreditor) {
+            return res.status(403).json({ message: 'Unauthorized to update this summary' });
+        }
+
+        // Get the transaction IDs relevant to the user
+        const transactionIds = summary.transaction_ids as { debtor: number[], creditor: number[] };
+        let relevantTransactionIds: any = [];
+
+
+        if (isDebtor) {
+            // If user is debtor, update their expense transactions
+            relevantTransactionIds = transactionIds.debtor || [];
+        } else if (isCreditor) {
+            // If user is creditor, update their income transactions
+            relevantTransactionIds = transactionIds.creditor || [];
+        }
+
+        if (relevantTransactionIds.length === 0) {
+            return res.status(400).json({ message: 'No transactions found for this user' });
+        }
+
+        console.log('Marking transactions as paid:', relevantTransactionIds);
+
+        // Update all relevant transactions to mark them as paid
+        await Transaction.update(
+            { is_paid: true },
+            { where: { transaction_id: { [Op.in]: relevantTransactionIds } } }
+        );
+
+        // If both the debtor and creditor have confirmed, we might also want to update
+        // the other party's transactions. For now, we'll just update the requester's transactions.
+
+        // Get the updated transactions to return in the response
+        const updatedTransactions = await Transaction.findAll({
+            where: { transaction_id: { [Op.in]: relevantTransactionIds } }
+        });
+
+        return res.status(200).json({
+            message: `${isDebtor ? 'Debt' : 'Payment'} marked as paid successfully`,
+            summaryId: summary.id,
+            userRole: isDebtor ? 'debtor' : 'creditor',
+            updatedTransactions: updatedTransactions.map(t => ({
+                id: t.transaction_id,
+                amount: t.amount,
+                note: t.note,
+                date: t.date,
+                isPaid: t.is_paid
+            }))
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+});
 
 export default router;
