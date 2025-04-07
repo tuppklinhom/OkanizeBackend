@@ -70,7 +70,7 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
                 COALESCE(
                     (SELECT COUNT(*) 
                      FROM "CategoryCounts" 
-                     WHERE "CategoryCounts".category_id = Category.category_id), 
+                     WHERE "CategoryCounts".category_id = "Category".category_id), 
                     0
                 )
                 `), 
