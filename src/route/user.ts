@@ -64,7 +64,7 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
         const categories = await Category.findAll({
             where: whereClause,
             order: [
-                [sequelize.literal('COALESCE(categoryCount.count, 0)'), 'DESC'] // Sort by count descending
+                [sequelize.literal('COALESCE(CategoryCount.count, 0)'), 'DESC'] // Sort by count descending
             ],
         });
 
