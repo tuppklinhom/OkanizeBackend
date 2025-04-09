@@ -11,6 +11,7 @@ import { Wallet } from '../model/Wallet';
 import { TransactionServices } from '../module/TransactionServices';
 import { Category } from '../model/Category';
 import { SummaryGroupTransaction } from '../model/SummaryGroupTransaction';
+import { CategoryCount } from '../model/CategoryCount';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -53,6 +54,19 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
                 is_paid = true;
             }
 
+            if(category_id){
+                console.log("category_id", category_id)
+                const count = await CategoryCount.findOne({where: {category_id: category_id, user_id: user.user_id}})
+                console.log("count", count)
+                if (!count) {
+                    await CategoryCount.create({category_id: category_id, user_id: user.user_id, count: 1})
+                }else{
+                    await CategoryCount.increment(
+                        { count: 1 },
+                        { where: { category_id: category_id, user_id: user.user_id } }
+                    )
+                }
+            }
             if (req.file) {
                 const filePath = req.file.path;
                 const fileBuffer = fs.readFileSync(filePath);
@@ -206,6 +220,18 @@ router.post('/update', KeyPair.requireAuth(),async (req, res, next): Promise<any
             isPaid = transaction.is_paid;   
         }
 
+        if(category_id){
+            const count = await CategoryCount.findOne({where: {category_id: category_id}})
+            if (!count) {
+                await CategoryCount.create({category_id: category_id, user_id: user.user_id,count: 1})
+            }else{
+                await CategoryCount.increment(
+                    { count: 1 },
+                    { where: { category_id: category_id, user_id: user.user_id } }
+                )
+            }
+        }
+        
         const transactionEdited = await TransactionServices.updateTransactionWithNotification(user.user_id, transaction.transaction_id,{
             amount: amount,
             wallet_id: wallet_id,
@@ -354,7 +380,8 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             if (transactionIds.debtor && transactionIds.debtor.length > 0) {
                 debtorTransactions = await Transaction.findAll({
                     where: { 
-                        transaction_id: { [Op.in]: transactionIds.debtor }
+                        transaction_id: { [Op.in]: transactionIds.debtor },
+                        is_paid: false // Only fetch unpaid transactions for debtor
                     }
                 });
             }
@@ -362,7 +389,8 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             if (transactionIds.creditor && transactionIds.creditor.length > 0) {
                 creditorTransactions = await Transaction.findAll({
                     where: { 
-                        transaction_id: { [Op.in]: transactionIds.creditor }
+                        transaction_id: { [Op.in]: transactionIds.creditor },
+                        is_paid: false // Only fetch unpaid transactions for creditor
                     }
                 });
             }
@@ -411,7 +439,6 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
     }
 });
 
-// Add this route to your group.ts file
 
 router.post('/summary/mark_paid', KeyPair.requireAuth(), async (req, res, next): Promise<any> => {
     try {

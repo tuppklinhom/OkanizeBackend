@@ -136,20 +136,29 @@ export class SummaryService {
       }
       
       // Convert to array and ensure it's sorted by date
-      return Object.entries(groupedData)
-        .map(([date, data]) => ({
-          date,
-          income: data.income,
-          expense: data.expense,
-          displayLabel: moment(timeFormat === 'month' ? date.replace('-W', ' ') : date).format(labelFormat)
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map(item => ({
-          date: item.date,
-          income: item.income,
-          expense: item.expense,
-          displayLabel: item.displayLabel
-        }));
+      // Convert to array and ensure it's sorted by date
+    return Object.entries(groupedData)
+    .map(([date, data]) => {
+      let displayLabel;
+      
+      // Properly handle different date formats
+      if (timeFormat === 'month' && date.includes('-W')) {
+        // Extract week number directly for week format
+        const weekMatch = date.match(/\d{4}-W(\d{1,2})/);
+        displayLabel = weekMatch ? `W${weekMatch[1]}` : 'Unknown';
+      } else {
+        // For other formats, use moment formatting
+        displayLabel = moment(date).format(labelFormat);
+      }
+      
+      return {
+        date,
+        income: data.income,
+        expense: data.expense,
+        displayLabel
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
     } catch (error) {
       console.error('Error generating daily summary:', error);
       throw error;
