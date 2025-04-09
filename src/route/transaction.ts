@@ -55,9 +55,11 @@ router.post('/create', KeyPair.requireAuth(), upload.single('receipt_image'),asy
             }
 
             if(category_id){
-                const count = await CategoryCount.findOne({where: {category_id: category_id}})
+                console.log("category_id", category_id)
+                const count = await CategoryCount.findOne({where: {category_id: category_id, user_id: user.user_id}})
+                console.log("count", count)
                 if (!count) {
-                    await CategoryCount.create({category_id: category_id, user_id: user.user_id,count: 1})
+                    await CategoryCount.create({category_id: category_id, user_id: user.user_id, count: 1})
                 }else{
                     await CategoryCount.increment(
                         { count: 1 },
