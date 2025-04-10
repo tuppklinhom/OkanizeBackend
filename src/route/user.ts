@@ -62,6 +62,7 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
         }else{
             whereClause = { [Op.or]: [{ user_id: payloadData.userId }, { user_id: null }] }
         }
+        
         const categories = await Category.findAll({
             where: whereClause,
             include: [

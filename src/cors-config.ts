@@ -7,7 +7,7 @@ import { Express } from 'express';
  */
 export function configureCors(app: Express): void {
   const corsOptions = {
-    origin: 'https://okanize.shopsthai.com',
+    origin: ['https://okanize.shopsthai.com', 'https://okanize-dev.shopsthai.com'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
     allowedHeaders: ['Content-Type', 'content-type', 'Authorization', 'authorization', 'Access-Token']
