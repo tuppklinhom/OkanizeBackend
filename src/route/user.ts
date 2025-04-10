@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Wallet } from '../model/Wallet';
 import { Category } from '../model/Category';
-import { Op, WhereOptions } from 'sequelize';
+import { HasMany, Op, WhereOptions } from 'sequelize';
 import { Transaction } from '../model/Transaction';
 import KeyPair from '../module/KeyPair';
 import jwt from 'jsonwebtoken';
@@ -10,6 +10,7 @@ import { parse } from 'path';
 import { Where } from 'sequelize/types/utils';
 import { User } from '../model/User';
 import { sequelize } from '../database';
+import { CategoryCount } from '../model/CategoryCount';
 
 const router = Router();
 
@@ -63,10 +64,24 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
         }
         const categories = await Category.findAll({
             where: whereClause,
-            order: [
-                [sequelize.literal('COALESCE(CategoryCount.count, 0)'), 'DESC'] // Sort by count descending
+            include: [
+                {
+                    association: new HasMany(Category, CategoryCount, { foreignKey: 'category_id', as: 'CategoryCount', }),
+                    model: CategoryCount,
+                    as: 'CategoryCount',
+                    attributes: [],
+                    required: false,
+                    where: {
+                        user_id: payloadData.userId // Add the user_id condition here
+                    }
+                }
             ],
+            order: [
+                [sequelize.literal('COALESCE("CategoryCount"."count", 0)'), 'DESC']
+            ],
+            nest: false
         });
+        
 
         const categoriesWithBudgetLimit = await Promise.all(categories.map(async (category) => {
             const budgetLimitObj = await UserBudgetLimit.findOne({where: {category_id: category.category_id, user_id: payloadData.userId}}) 
@@ -76,6 +91,7 @@ router.get('/category/query', KeyPair.requireAuth(),async (req, res, next): Prom
             }
         }
         ));
+        
         res.json(categoriesWithBudgetLimit);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch categories', details: error });
