@@ -302,7 +302,7 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
         }
 
         const { userId } = payloadData as JwtPayload;
-        const { summaryId, asDebtor, asCreditor } = req.body;
+        const { summaryId, asDebtor, asCreditor, allTransactions} = req.body;
 
         let summaryTransactions = [];
 
@@ -357,7 +357,7 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
         }
         
         // Enrich the summary transactions with user information and transaction details
-        const enrichedSummaryTransactions = await Promise.all(summaryTransactions.map(async (summary) => {
+        let enrichedSummaryTransactions = await Promise.all(summaryTransactions.map(async (summary) => {
             // Get debtor information
             const debtor = await User.findOne({ 
                 where: { user_id: summary.user_id },
@@ -396,13 +396,35 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             }
             
             // Calculate payment status based on related transactions
-            const isPaid = debtorTransactions.every(transaction => transaction.is_paid);
+            let isPaid, role;
+            if (userId === summary.user_id) {
+                // User is the debtor - status depends on their transactions
+                role = 'debtor';
+                isPaid = debtorTransactions.every(transaction => transaction.is_paid);
+            } else if (userId === summary.target_id) {
+                // User is the creditor - status depends on their transactions
+                role = 'creditor';
+                isPaid = creditorTransactions.every(transaction => transaction.is_paid);
+            } else {
+                // Fallback case (shouldn't happen due to earlier authorization)
+                isPaid = false;
+            }
+
+            const createdDate = new Date(summary.createdAt);
+            const currentDate = new Date();
+            const ageInMonths = (currentDate.getFullYear() - createdDate.getFullYear()) * 12 + 
+                   (currentDate.getMonth() - createdDate.getMonth());
+
             
             return {
                 id: summary.id,
                 description: summary.description,
                 amount: summary.amount,
                 status: isPaid ? 'Paid' : 'Pending',
+                ageInMonths: ageInMonths,
+                isPaid: isPaid,
+                role: role,
+                createdAt: summary.createdAt,
                 debtor: {
                     id: debtor?.user_id,
                     username: debtor?.username,
@@ -431,6 +453,15 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                 }
             };
         }));
+
+        if (allTransactions !== true) {
+            enrichedSummaryTransactions = enrichedSummaryTransactions.filter(summary => {
+                // Keep the transaction if:
+                // 1. It's not paid, OR
+                // 2. It's paid but less than a month old
+                return !summary.isPaid || summary.ageInMonths < 1;
+            });
+        }
         
         return res.status(200).json(enrichedSummaryTransactions);
     } catch (error) {
