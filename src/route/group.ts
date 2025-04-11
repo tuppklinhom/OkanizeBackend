@@ -452,6 +452,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
 
         // Handle cases where balances already equal zero (settled) - NEW CODE
         for (const [userId, balance] of balances.entries()) {
+            console.log(userId, balance)
             if (Math.abs(balance) < 0.01) { // Balance is effectively zero
                 const transactionIds = [...(expenseTransactionMap.get(userId) || []), 
                                     ...(incomeTransactionMap.get(userId) || [])];
