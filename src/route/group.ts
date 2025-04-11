@@ -460,15 +460,14 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                     // Create a self-transaction that's already marked as paid
                     await SummaryGroupTransaction.create({
                         user_id: userId,
+                        space_id: groupSpace.space_id,
                         target_id: userId, // Self-transaction since balance is already settled
                         transaction_ids: {
                             debtor: expenseTransactionMap.get(userId) || [],
                             creditor: incomeTransactionMap.get(userId) || []
                         },
                         description: `Settled balance for group: ${groupSpace.name}`,
-                        amount: 0,
-                        status: 'paid', // Mark as already paid
-                        paid_at: new Date() // Set payment date to now
+                        amount: transactionIds.reduce((sum, id) => sum + (expenseTransactionMap.get(userId)?.includes(id) ? -1 : 1), 0) // Net amount
                     });
                 }
             }
@@ -492,6 +491,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 // Create summary record: debtor needs to pay creditor
                 await SummaryGroupTransaction.create({
                     user_id: debtorId,             // Person who needs to pay
+                    space_id: groupSpace.space_id,
                     target_id: creditorId,         // Person who receives payment
                     transaction_ids: {
                         debtor: debtorTransactionIds,

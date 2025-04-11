@@ -322,24 +322,10 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             }
             
             summaryTransactions.push(summary);
-        }else if (spaceId){
-            const summary = await SummaryGroupTransaction.findOne({ 
-                where: { spaceId: spaceId }
-            });
-            
-            if (!summary) {
-                return res.status(404).json({ message: 'Summary transaction not found' });
-            }
-            
-            // Only allow access if the user is either the debtor or creditor
-            if (summary.user_id !== userId && summary.target_id !== userId) {
-                return res.status(403).json({ message: 'Unauthorized to view this summary' });
-            }
-            
-        } 
+        }
         else {
             // Query by user's role in the transactions
-            let whereClause = {};
+            let whereClause = {} as WhereOptions
             
             if (asDebtor === true && asCreditor === true) {
                 // User wants to see transactions where they are either debtor or creditor
@@ -365,6 +351,11 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                 };
             }
             
+            if (spaceId) {
+                whereClause = { ...whereClause,
+                                space_id: spaceId
+                            }
+            }
             summaryTransactions = await SummaryGroupTransaction.findAll({
                 where: whereClause,
                 order: [['createdAt', 'DESC']]
