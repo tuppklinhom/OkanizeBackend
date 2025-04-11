@@ -455,6 +455,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
             if (Math.abs(balance) < 0.01) { // Balance is effectively zero
                 const transactionIds = [...(expenseTransactionMap.get(userId) || []), 
                                     ...(incomeTransactionMap.get(userId) || [])];
+                console.log(transactionIds)
                 
                 if (transactionIds.length > 0) {
                     // Create a self-transaction that's already marked as paid
