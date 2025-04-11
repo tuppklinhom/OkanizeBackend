@@ -449,11 +449,35 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
         const creditors = Array.from(balances.entries())
             .filter(([_, balance]) => balance > 0)  // People who are owed money (positive balance)
             .sort((a, b) => b[1] - a[1]);          // Sort by balance (most positive first)
-        
+
+        // Handle cases where balances already equal zero (settled) - NEW CODE
+        for (const [userId, balance] of balances.entries()) {
+            if (Math.abs(balance) < 0.01) { // Balance is effectively zero
+                const transactionIds = [...(expenseTransactionMap.get(userId) || []), 
+                                    ...(incomeTransactionMap.get(userId) || [])];
+                
+                if (transactionIds.length > 0) {
+                    // Create a self-transaction that's already marked as paid
+                    await SummaryGroupTransaction.create({
+                        user_id: userId,
+                        target_id: userId, // Self-transaction since balance is already settled
+                        transaction_ids: {
+                            debtor: expenseTransactionMap.get(userId) || [],
+                            creditor: incomeTransactionMap.get(userId) || []
+                        },
+                        description: `Settled balance for group: ${groupSpace.name}`,
+                        amount: 0,
+                        status: 'paid', // Mark as already paid
+                        paid_at: new Date() // Set payment date to now
+                    });
+                }
+            }
+        }
+
         // Optimization: Simplify payments by matching debtors to creditors
         let debtorIndex = 0;
         let creditorIndex = 0;
-        
+
         while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
             const [debtorId, debtorBalance] = debtors[debtorIndex];
             const [creditorId, creditorBalance] = creditors[creditorIndex];
@@ -481,12 +505,18 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 debtors[debtorIndex][1] += amountToTransfer;
                 creditors[creditorIndex][1] -= amountToTransfer;
                 
-                // Move to next person if balance is settled
-                if (Math.abs(debtors[debtorIndex][1]) < 0.01) debtorIndex++;
-                if (creditors[creditorIndex][1] < 0.01) creditorIndex++;
+                // Check if balance settled to zero and mark as paid if necessary
+                if (Math.abs(debtors[debtorIndex][1]) < 0.01) {
+                    // Optional: Update the transaction to mark it as paid
+                    // Could implement this if you have transaction ID from the create operation
+                    debtorIndex++;
+                }
+                
+                if (creditors[creditorIndex][1] < 0.01) {
+                    creditorIndex++;
+                }
             }
         }
-        
         // Mark group as closed
         groupSpace.isClosed = true;
         await groupSpace.save();
