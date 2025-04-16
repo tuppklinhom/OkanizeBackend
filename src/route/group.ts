@@ -665,65 +665,6 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
             }
         }
 
-        // Handle cases where balances already equal zero (settled)
-        for (const [userId, balance] of balances.entries()) {
-            if (Math.abs(balance) < 0.01) { // Balance is effectively zero
-                const transactionIds = {
-                    debtor: expenseTransactionMap.get(userId) || [],
-                    creditor: incomeTransactionMap.get(userId) || []
-                };
-
-                const userTxns = userTransactions.get(userId);
-
-                if (userTxns && (userTxns.outgoing.length > 0 || userTxns.incoming.length > 0)) {
-                    // Collect only split transactions with record owner
-                    const userContributions = [];
-
-                    // Process user's outgoing transactions (expenses)
-                    for (const txn of userTxns.outgoing) {
-                        if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
-                            userContributions.push({
-                                note: txn.note,
-                                amount: txn.amount,
-                                recordOwner: "self"
-                            });
-                        }
-                    }
-
-                    // Process user's incoming transactions (income)
-                    for (const txn of userTxns.incoming) {
-                        if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
-                            userContributions.push({
-                                note: txn.note,
-                                amount: -txn.amount, // Negative for incoming
-                                recordOwner: "self"
-                            });
-                        }
-                    }
-
-                    // Create a self-transaction that's already marked as paid
-                    await SummaryGroupTransaction.create({
-                        user_id: userId,
-                        space_id: groupSpace.space_id,
-                        target_id: userId, // Self-transaction since balance is already settled
-                        transaction_ids: {
-                            // Keep original IDs for backward compatibility
-                            debtor: transactionIds.debtor,
-                            creditor: transactionIds.creditor,
-                            // Add paid/owed info for transparency
-                            paid: paidAmounts.get(userId) || 0,
-                            owed: owedAmounts.get(userId) || 0,
-                            // Only include split transactions with record owner
-                            contributions: {
-                                self: userContributions
-                            }
-                        },
-                        description: `Settled balance for group: ${groupSpace.name}`,
-                        amount: 0 // Net amount is zero
-                    });
-                }
-            }
-        }
 
         // Mark group as closed
         groupSpace.isClosed = true;
