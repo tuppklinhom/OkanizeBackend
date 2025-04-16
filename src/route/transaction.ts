@@ -401,7 +401,7 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                     // This user is the creditor - show creditor's perspective
                     contributionsList = Array.isArray(transactionData.contributions)
                         ? transactionData.contributions
-                        : (transactionData.contributions.creditor || []);
+                        : (transactionData.contributions.debtor || []);
                     role = 'creditor';
                 }
             }
