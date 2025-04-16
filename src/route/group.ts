@@ -420,7 +420,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                     if (memberTxns) {
                         memberTxns.outgoing.push({
                             id: expenseTransaction.transaction_id,
-                            note: `Split: ${groupTransaction.description}`,
+                            note: `Split to : ${groupTransaction.description}`,
                             amount: eachMemberAmount
                         });
                     }
@@ -486,7 +486,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                     if (memberTxns) {
                         memberTxns.outgoing.push({
                             id: expenseTransaction.transaction_id,
-                            note: `Split: ${groupTransaction.description}`,
+                            note: `Split from Group ${paidUserObj.username}: ${groupTransaction.description}`,
                             amount: splitSheet.amount
                         });
                     }
@@ -577,7 +577,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 
                 // Process debtor's incoming transactions (income)
                 for (const txn of debtorTxns.incoming) {
-                    if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
+                    if ((txn.note.includes("Received split from") || txn.note.includes("Split receive from")) && (txn.note.includes(creditorObj.username) || txn.note.includes(debtorObj.username))) {
                         debtorContributions.push({
                             note: txn.note,
                             amount: -txn.amount, // Negative for incoming
@@ -588,7 +588,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 
                 // Process creditor's outgoing transactions (expenses)
                 for (const txn of creditorTxns.outgoing) {
-                    if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
+                    if ((txn.note.includes("Split from Group") || txn.note.includes("Split:")) && (txn.note.includes(creditorObj.username) || txn.note.includes(debtorObj.username))) {
                         creditorContributions.push({
                             note: txn.note,
                             amount: txn.amount,
