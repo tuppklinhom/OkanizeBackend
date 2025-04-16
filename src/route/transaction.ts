@@ -424,6 +424,7 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             
             return {
                 id: summary.id,
+                space_id: summary.space_id,
                 description: summary.description,
                 amount: summary.amount,
                 status: isPaid ? 'Paid' : 'Pending',
