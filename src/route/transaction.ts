@@ -492,7 +492,7 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             return {
                 id: summary.id,
                 description: summary.description,
-                amount: summary.amount,
+                amount: contributionsList.reduce((sum: any, item: any) => sum + parseFloat(item.amount), 0),
                 status: isPaid ? 'Paid' : 'Pending',
                 ageInMonths: ageInMonths,
                 isPaid: isPaid,
@@ -513,10 +513,6 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                 // Include contributions in user-friendly format
                 contributions: contributionsList,
                 // Keep settlement transactions for backward compatibility
-                transactions: {
-                    settlement: settlementTransactions,
-                    contributing: [] // Empty array for backward compatibility
-                }
             };
         }));
 
