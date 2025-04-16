@@ -9,6 +9,7 @@ import { sequelize } from '../database';
 
 export class SummaryGroupTransaction extends Model<InferAttributes<SummaryGroupTransaction>, InferCreationAttributes<SummaryGroupTransaction>> {
     declare id: CreationOptional<number>;
+    declare space_id: number;
     declare user_id: number;
     declare target_id: number;
     declare transaction_ids: object;
@@ -23,6 +24,10 @@ SummaryGroupTransaction.init(
             type: DataTypes.INTEGER.UNSIGNED,
             autoIncrement: true,
             primaryKey: true,
+        },
+        space_id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            allowNull: false,
         },
         user_id: {
             type: DataTypes.INTEGER.UNSIGNED,

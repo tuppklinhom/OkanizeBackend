@@ -302,7 +302,7 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
         }
 
         const { userId } = payloadData as JwtPayload;
-        const { summaryId, asDebtor, asCreditor, allTransactions} = req.body;
+        const { summaryId, asDebtor, asCreditor, spaceId, allTransactions} = req.body;
 
         let summaryTransactions = [];
 
@@ -322,9 +322,10 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             }
             
             summaryTransactions.push(summary);
-        } else {
+        }
+        else {
             // Query by user's role in the transactions
-            let whereClause = {};
+            let whereClause = {} as WhereOptions
             
             if (asDebtor === true && asCreditor === true) {
                 // User wants to see transactions where they are either debtor or creditor
@@ -350,6 +351,11 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                 };
             }
             
+            if (spaceId) {
+                whereClause = { ...whereClause,
+                                space_id: spaceId
+                            }
+            }
             summaryTransactions = await SummaryGroupTransaction.findAll({
                 where: whereClause,
                 order: [['createdAt', 'DESC']]
