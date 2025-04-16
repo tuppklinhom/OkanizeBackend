@@ -527,84 +527,43 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
         const creditors = Array.from(balances.entries())
             .filter(([_, balance]) => balance > 0)  // People who are owed money (positive balance)
             .sort((a, b) => b[1] - a[1]);          // Sort by balance (most positive first)
-
-        // Handle cases where balances already equal zero (settled)
-        for (const [userId, balance] of balances.entries()) {
-            if (Math.abs(balance) < 0.01) { // Balance is effectively zero
-                const transactionIds = {
-                    debtor: expenseTransactionMap.get(userId) || [],
-                    creditor: incomeTransactionMap.get(userId) || []
-                };
-                
-                const userTxns = userTransactions.get(userId);
-                
-                if (userTxns && (userTxns.outgoing.length > 0 || userTxns.incoming.length > 0)) {
-                    // Create a self-transaction that's already marked as paid
-                    await SummaryGroupTransaction.create({
-                        user_id: userId,
-                        space_id: groupSpace.space_id,
-                        target_id: userId, // Self-transaction since balance is already settled
-                        transaction_ids: {
-                            // Keep original IDs for backward compatibility
-                            debtor: transactionIds.debtor,
-                            creditor: transactionIds.creditor,
-                            // Add paid/owed info for transparency
-                            paid: paidAmounts.get(userId) || 0,
-                            owed: owedAmounts.get(userId) || 0,
-                            // Simple format for contributions
-                            contributions: [
-                                ...userTxns.outgoing.map(t => ({
-                                    note: t.note,
-                                    amount: t.amount
-                                })),
-                                ...userTxns.incoming.map(t => ({
-                                    note: t.note,
-                                    amount: -t.amount // Negative amount for incoming (need to receive)
-                                }))
-                            ]
-                        },
-                        description: `Settled balance for group: ${groupSpace.name}`,
-                        amount: 0 // Net amount is zero
-                    });
-                }
-            }
-        }
-
-        // Optimization: Simplify payments by matching debtors to creditors
-        // In your router.post('/confirm', ...) function, replace the section that creates the SummaryGroupTransaction 
-        // This would go right before the "Optimization: Simplify payments by matching debtors to creditors" section
-
+            
+        console.log('Debtors:', debtors);
+        console.log('Creditors:', creditors);
+        
         // Optimization: Simplify payments by matching debtors to creditors
         let debtorIndex = 0;
         let creditorIndex = 0;
-
+        
         while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
             const [debtorId, debtorBalance] = debtors[debtorIndex];
             const [creditorId, creditorBalance] = creditors[creditorIndex];
-
+            
+            // Calculate the exact amount to transfer - this is the key fix
             const amountToTransfer = Math.min(Math.abs(debtorBalance), creditorBalance);
-
+            console.log(`Transfer calculation: ${debtorId} (${debtorBalance}) to ${creditorId} (${creditorBalance}) = ${amountToTransfer}`);
+            
             if (amountToTransfer > 0) {
                 // Get the debtor's and creditor's details
                 const debtorObj = await User.findByPk(debtorId);
                 const creditorObj = await User.findByPk(creditorId);
-
+                
                 if (!debtorObj || !creditorObj) {
                     throw new Error(`User not found: ${!debtorObj ? debtorId : creditorId}`);
                 }
-
+                
                 // Get all transactions for both users
                 const debtorTxns = userTransactions.get(debtorId);
                 const creditorTxns = userTransactions.get(creditorId);
-
+                
                 if (!debtorTxns || !creditorTxns) {
                     throw new Error("Transaction data not found");
                 }
-
+                
                 // Collect only split transactions with record owner
                 const debtorContributions = [];
                 const creditorContributions = [];
-
+                
                 // Process debtor's outgoing transactions (expenses)
                 for (const txn of debtorTxns.outgoing) {
                     if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
@@ -615,7 +574,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         });
                     }
                 }
-
+                
                 // Process debtor's incoming transactions (income)
                 for (const txn of debtorTxns.incoming) {
                     if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
@@ -626,7 +585,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         });
                     }
                 }
-
+                
                 // Process creditor's outgoing transactions (expenses)
                 for (const txn of creditorTxns.outgoing) {
                     if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
@@ -637,7 +596,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         });
                     }
                 }
-
+                
                 // Process creditor's incoming transactions (income)
                 for (const txn of creditorTxns.incoming) {
                     if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
@@ -648,7 +607,13 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         });
                     }
                 }
-
+                
+                // Log the exact values being used to create the transaction
+                console.log(`Creating SummaryGroupTransaction: debtorId=${debtorId}, creditorId=${creditorId}`);
+                console.log(`Paid amounts: debtor=${paidAmounts.get(debtorId) || 0}, creditor=${paidAmounts.get(creditorId) || 0}`);
+                console.log(`Owed amounts: debtor=${owedAmounts.get(debtorId) || 0}, creditor=${owedAmounts.get(creditorId) || 0}`);
+                console.log(`Final amount to transfer: ${amountToTransfer}`);
+                
                 // Create summary record with simple transaction list
                 await SummaryGroupTransaction.create({
                     user_id: debtorId,             // Person who needs to pay
@@ -676,24 +641,29 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                     description: `Payment for group: ${groupSpace.name}`,
                     amount: amountToTransfer
                 });
-
-                // Update balances
-                debtors[debtorIndex][1] += amountToTransfer;
-                creditors[creditorIndex][1] -= amountToTransfer;
-
+                
+                // Update balances - this is critical for correct calculations
+                const updatedDebtorBalance = debtors[debtorIndex][1] + amountToTransfer;
+                const updatedCreditorBalance = creditors[creditorIndex][1] - amountToTransfer;
+                
+                debtors[debtorIndex][1] = updatedDebtorBalance;
+                creditors[creditorIndex][1] = updatedCreditorBalance;
+                
+                console.log(`Updated balances: debtor ${debtorId}: ${updatedDebtorBalance}, creditor ${creditorId}: ${updatedCreditorBalance}`);
+                
                 // Check if balance settled to zero and move to next user if necessary
+                // Using a small epsilon for floating point comparison
                 if (Math.abs(debtors[debtorIndex][1]) < 0.01) {
+                    console.log(`Debtor ${debtorId} balance settled, moving to next debtor`);
                     debtorIndex++;
                 }
-
+                
                 if (creditors[creditorIndex][1] < 0.01) {
+                    console.log(`Creditor ${creditorId} balance settled, moving to next creditor`);
                     creditorIndex++;
                 }
             }
         }
-
-        // Now also update the similar code in the part that handles users with zero balance
-        // Here's the modified version for that section:
 
         // Handle cases where balances already equal zero (settled)
         for (const [userId, balance] of balances.entries()) {
