@@ -294,16 +294,37 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
         const groupTransactions = await GroupTransaction.findAll({ where: { space_id: groupSpace.space_id } });
         const allMember = await GroupMember.findAll({ where: { space_id: groupSpace.space_id } });
         
-        // Track balances: who paid and who owes
-        const balances = new Map<number, number>(); // userId -> balance (positive: is owed money, negative: owes money)
+        // Track amounts paid and owed by each user
+        const paidAmounts = new Map<number, number>(); // userId -> amount paid
+        const owedAmounts = new Map<number, number>(); // userId -> amount owed
+        
+        // Track all transactions related to a user
         const expenseTransactionMap = new Map<number, number[]>(); // userId -> list of expense transaction IDs
         const incomeTransactionMap = new Map<number, number[]>(); // userId -> list of income transaction IDs
         
-        // Initialize balances and transaction maps for all members
+        // Track transactions in a simple way for readability
+        interface SimpleTransaction {
+            id: number;
+            note: string;
+            amount: number;
+        }
+        
+        // Each user will have outgoing (they pay) and incoming (they receive) transactions
+        const userTransactions = new Map<number, {
+            outgoing: SimpleTransaction[],
+            incoming: SimpleTransaction[]
+        }>();
+        
+        // Initialize maps for all members
         for (const member of allMember) {
-            balances.set(member.user_id, 0);
+            paidAmounts.set(member.user_id, 0);
+            owedAmounts.set(member.user_id, 0);
             expenseTransactionMap.set(member.user_id, []);
             incomeTransactionMap.set(member.user_id, []);
+            userTransactions.set(member.user_id, {
+                outgoing: [],
+                incoming: []
+            });
         }
 
         for (const groupTransaction of groupTransactions) {
@@ -320,33 +341,48 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 throw new Error(`Paid member with ID ${paidMemberID} not found`);
             }
 
-            // Update balance for payer (they paid the full amount)
-            balances.set(paidMemberID, (balances.get(paidMemberID) || 0) + transactionAmount);
+            // Track how much each user has paid upfront
+            paidAmounts.set(paidMemberID, (paidAmounts.get(paidMemberID) || 0) + transactionAmount);
+
+            // Create expense transaction for the paid member (keep original behavior)
+            const paidMemberExpense = await TransactionServices.createTransactionWithNotification(paidUserObj.user_id, {
+                wallet_id: paidUserObj.default_wallet,
+                category_id: paidUserObj.default_category ? paidUserObj.default_category : undefined,
+                amount: transactionAmount,
+                date: currentTransaction.date,
+                type: 'Expense',
+                note: `Paid in advance for group transaction: ${groupTransaction.description}`
+            });
+            
+            // Track this transaction
+            const paidMemberExpenseList = expenseTransactionMap.get(paidMemberID) || [];
+            paidMemberExpenseList.push(paidMemberExpense.transaction_id);
+            expenseTransactionMap.set(paidMemberID, paidMemberExpenseList);
+            
+            // Track as a simple outgoing transaction (they paid)
+            const userTxns = userTransactions.get(paidMemberID);
+            if (userTxns) {
+                userTxns.outgoing.push({
+                    id: paidMemberExpense.transaction_id,
+                    note: `Paid for: ${groupTransaction.description}`,
+                    amount: transactionAmount
+                });
+            }
 
             if (!groupTransaction.split_member || Object.keys(groupTransaction.split_member).length === 0) {
                 // Auto-split with all members equally
                 const memberCount = allMember.length;
                 const eachMemberAmount = transactionAmount / memberCount;
 
-                // Create expense transaction for the paid member
-                await TransactionServices.createTransactionWithNotification(paidUserObj.user_id, {
-                    wallet_id: paidUserObj.default_wallet,
-                    category_id: paidUserObj.default_category ? paidUserObj.default_category : undefined,
-                    amount: transactionAmount,
-                    date: currentTransaction.date,
-                    type: 'Expense',
-                    note: `Paid in advance for group transaction: ${groupTransaction.description}`
-                });
-
-                // For each member, adjust their balance (they owe their share)
+                // Track what each member owes (their fair share)
                 for (const member of allMember) {
-                    if (member.user_id === paidMemberID) continue; // Skip the payer
+                    owedAmounts.set(member.user_id, (owedAmounts.get(member.user_id) || 0) + eachMemberAmount);
+                    
+                    // Skip the payer for transaction creation (they already paid)
+                    if (member.user_id === paidMemberID) continue;
                     
                     const userObj = await User.findByPk(member.user_id);
                     if (!userObj) continue;
-
-                    // Update balance for this member (they owe their share)
-                    balances.set(member.user_id, (balances.get(member.user_id) || 0) - eachMemberAmount);
 
                     // Create expense transaction for the current member
                     const expenseTransaction = await TransactionServices.createTransactionWithNotification(userObj.user_id, {
@@ -369,39 +405,49 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         is_paid: false
                     });
                     
-                    // Track the created transaction IDs
-                    const memberExpenseTransactions = expenseTransactionMap.get(member.user_id) || [];
-                    memberExpenseTransactions.push(expenseTransaction.transaction_id);
-                    expenseTransactionMap.set(member.user_id, memberExpenseTransactions);
+                    // Track these transactions
+                    const memberExpenseList = expenseTransactionMap.get(member.user_id) || [];
+                    memberExpenseList.push(expenseTransaction.transaction_id);
+                    expenseTransactionMap.set(member.user_id, memberExpenseList);
                     
-                    const paidMemberIncomeTransactions = incomeTransactionMap.get(paidMemberID) || [];
-                    paidMemberIncomeTransactions.push(incomeTransaction.transaction_id);
-                    incomeTransactionMap.set(paidMemberID, paidMemberIncomeTransactions);
+                    const paidMemberIncomeList = incomeTransactionMap.get(paidMemberID) || [];
+                    paidMemberIncomeList.push(incomeTransaction.transaction_id);
+                    incomeTransactionMap.set(paidMemberID, paidMemberIncomeList);
+                    
+                    // Track these as simple transactions
+                    // Member has an outgoing transaction (they need to pay)
+                    const memberTxns = userTransactions.get(member.user_id);
+                    if (memberTxns) {
+                        memberTxns.outgoing.push({
+                            id: expenseTransaction.transaction_id,
+                            note: `Split: ${groupTransaction.description}`,
+                            amount: eachMemberAmount
+                        });
+                    }
+                    
+                    // Paid member has an incoming transaction (they should receive)
+                    const paidMemberTxns = userTransactions.get(paidMemberID);
+                    if (paidMemberTxns) {
+                        paidMemberTxns.incoming.push({
+                            id: incomeTransaction.transaction_id,
+                            note: `Split receive from ${userObj.username}: ${groupTransaction.description}`,
+                            amount: eachMemberAmount
+                        });
+                    }
                 }
             } else {
                 // Handle custom split
                 const splitSheets = groupTransaction.split_member as Array<SplitMember>;
                 
-                // Create expense transaction for the paid member
-                await TransactionServices.createTransactionWithNotification(paidUserObj.user_id, {
-                    wallet_id: paidUserObj.default_wallet,
-                    category_id: paidUserObj.default_category ? paidUserObj.default_category : undefined,
-                    amount: transactionAmount,
-                    date: currentTransaction.date,
-                    type: 'Expense',
-                    note: `Paid in advance for group transaction: ${groupTransaction.description}`
-                });
-                
-                // Process each member's split amount
+                // Track what each member owes based on custom split
                 for (const splitSheet of splitSheets) {
+                    owedAmounts.set(splitSheet.userID, (owedAmounts.get(splitSheet.userID) || 0) + splitSheet.amount);
+                    
+                    // Skip the payer (they don't owe themselves)
+                    if (splitSheet.userID === paidMemberID) continue;
+
                     const userObj = await User.findByPk(splitSheet.userID);
                     if (!userObj) continue;
-
-                    // Skip the payer (they don't owe themselves)
-                    if (userObj.user_id === paidMemberID) continue;
-
-                    // Update balance for this member (they owe their share)
-                    balances.set(splitSheet.userID, (balances.get(splitSheet.userID) || 0) - splitSheet.amount);
 
                     // Create expense transaction for the current member
                     const expenseTransaction = await TransactionServices.createTransactionWithNotification(userObj.user_id, {
@@ -425,14 +471,35 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         is_paid: false
                     });
                     
-                    // Track the created transaction IDs
-                    const memberExpenseTransactions = expenseTransactionMap.get(splitSheet.userID) || [];
-                    memberExpenseTransactions.push(expenseTransaction.transaction_id);
-                    expenseTransactionMap.set(splitSheet.userID, memberExpenseTransactions);
+                    // Track these transactions
+                    const memberExpenseList = expenseTransactionMap.get(splitSheet.userID) || [];
+                    memberExpenseList.push(expenseTransaction.transaction_id);
+                    expenseTransactionMap.set(splitSheet.userID, memberExpenseList);
                     
-                    const paidMemberIncomeTransactions = incomeTransactionMap.get(paidMemberID) || [];
-                    paidMemberIncomeTransactions.push(incomeTransaction.transaction_id);
-                    incomeTransactionMap.set(paidMemberID, paidMemberIncomeTransactions)
+                    const paidMemberIncomeList = incomeTransactionMap.get(paidMemberID) || [];
+                    paidMemberIncomeList.push(incomeTransaction.transaction_id);
+                    incomeTransactionMap.set(paidMemberID, paidMemberIncomeList);
+                    
+                    // Track these as simple transactions
+                    // Member has an outgoing transaction (they need to pay)
+                    const memberTxns = userTransactions.get(splitSheet.userID);
+                    if (memberTxns) {
+                        memberTxns.outgoing.push({
+                            id: expenseTransaction.transaction_id,
+                            note: `Split: ${groupTransaction.description}`,
+                            amount: splitSheet.amount
+                        });
+                    }
+                    
+                    // Paid member has an incoming transaction (they should receive)
+                    const paidMemberTxns = userTransactions.get(paidMemberID);
+                    if (paidMemberTxns) {
+                        paidMemberTxns.incoming.push({
+                            id: incomeTransaction.transaction_id,
+                            note: `Split receive from ${userObj.username}: ${groupTransaction.description}`,
+                            amount: splitSheet.amount
+                        });
+                    }
                 }
             }
             
@@ -441,7 +508,18 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
             await currentTransaction.destroy();
         }
         
-        // Create SummaryGroupTransaction records for net balances
+        // Calculate final balances based on paid vs owed amounts
+        const balances = new Map<number, number>();
+        
+        for (const userId of paidAmounts.keys()) {
+            const amountPaid = paidAmounts.get(userId) || 0;
+            const amountOwed = owedAmounts.get(userId) || 0;
+            const balance = amountPaid - amountOwed; // Positive: overpaid, Negative: underpaid
+            balances.set(userId, balance);
+            console.log(`User ${userId} paid ${amountPaid}, owed ${amountOwed}, net balance: ${balance}`);
+        }
+        
+        // Identify debtors and creditors
         const debtors = Array.from(balances.entries())
             .filter(([_, balance]) => balance < 0)  // People who owe money (negative balance)
             .sort((a, b) => a[1] - b[1]);          // Sort by balance (most negative first)
@@ -450,30 +528,51 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
             .filter(([_, balance]) => balance > 0)  // People who are owed money (positive balance)
             .sort((a, b) => b[1] - a[1]);          // Sort by balance (most positive first)
 
-        // Handle cases where balances already equal zero (settled) - NEW CODE
+        // Handle cases where balances already equal zero (settled)
         for (const [userId, balance] of balances.entries()) {
-            console.log(userId, balance)
             if (Math.abs(balance) < 0.01) { // Balance is effectively zero
-                const transactionIds = [...(expenseTransactionMap.get(userId) || []), 
-                                    ...(incomeTransactionMap.get(userId) || [])];
-                console.log(transactionIds)
+                const transactionIds = {
+                    debtor: expenseTransactionMap.get(userId) || [],
+                    creditor: incomeTransactionMap.get(userId) || []
+                };
                 
-                if (transactionIds.length > 0) {
+                const userTxns = userTransactions.get(userId);
+                
+                if (userTxns && (userTxns.outgoing.length > 0 || userTxns.incoming.length > 0)) {
                     // Create a self-transaction that's already marked as paid
                     await SummaryGroupTransaction.create({
                         user_id: userId,
                         space_id: groupSpace.space_id,
                         target_id: userId, // Self-transaction since balance is already settled
                         transaction_ids: {
-                            debtor: expenseTransactionMap.get(userId) || [],
-                            creditor: incomeTransactionMap.get(userId) || []
+                            // Keep original IDs for backward compatibility
+                            debtor: transactionIds.debtor,
+                            creditor: transactionIds.creditor,
+                            // Add paid/owed info for transparency
+                            paid: paidAmounts.get(userId) || 0,
+                            owed: owedAmounts.get(userId) || 0,
+                            // Simple format for contributions
+                            contributions: [
+                                ...userTxns.outgoing.map(t => ({
+                                    note: t.note,
+                                    amount: t.amount
+                                })),
+                                ...userTxns.incoming.map(t => ({
+                                    note: t.note,
+                                    amount: -t.amount // Negative amount for incoming (need to receive)
+                                }))
+                            ]
                         },
                         description: `Settled balance for group: ${groupSpace.name}`,
-                        amount: transactionIds.reduce((sum, id) => sum + (expenseTransactionMap.get(userId)?.includes(id) ? -1 : 1), 0) // Net amount
+                        amount: 0 // Net amount is zero
                     });
                 }
             }
         }
+
+        // Optimization: Simplify payments by matching debtors to creditors
+        // In your router.post('/confirm', ...) function, replace the section that creates the SummaryGroupTransaction 
+        // This would go right before the "Optimization: Simplify payments by matching debtors to creditors" section
 
         // Optimization: Simplify payments by matching debtors to creditors
         let debtorIndex = 0;
@@ -482,43 +581,180 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
         while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
             const [debtorId, debtorBalance] = debtors[debtorIndex];
             const [creditorId, creditorBalance] = creditors[creditorIndex];
-            
+
             const amountToTransfer = Math.min(Math.abs(debtorBalance), creditorBalance);
-            
+
             if (amountToTransfer > 0) {
-                // Get the transaction IDs from our maps
-                const debtorTransactionIds = expenseTransactionMap.get(debtorId) || [];
-                const creditorTransactionIds = incomeTransactionMap.get(creditorId) || [];
-                
-                // Create summary record: debtor needs to pay creditor
+                // Get the debtor's and creditor's details
+                const debtorObj = await User.findByPk(debtorId);
+                const creditorObj = await User.findByPk(creditorId);
+
+                if (!debtorObj || !creditorObj) {
+                    throw new Error(`User not found: ${!debtorObj ? debtorId : creditorId}`);
+                }
+
+                // Get all transactions for both users
+                const debtorTxns = userTransactions.get(debtorId);
+                const creditorTxns = userTransactions.get(creditorId);
+
+                if (!debtorTxns || !creditorTxns) {
+                    throw new Error("Transaction data not found");
+                }
+
+                // Collect only split transactions with record owner
+                const debtorContributions = [];
+                const creditorContributions = [];
+
+                // Process debtor's outgoing transactions (expenses)
+                for (const txn of debtorTxns.outgoing) {
+                    if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
+                        debtorContributions.push({
+                            note: txn.note,
+                            amount: txn.amount,
+                            recordOwner: "debtor"
+                        });
+                    }
+                }
+
+                // Process debtor's incoming transactions (income)
+                for (const txn of debtorTxns.incoming) {
+                    if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
+                        debtorContributions.push({
+                            note: txn.note,
+                            amount: -txn.amount, // Negative for incoming
+                            recordOwner: "debtor"
+                        });
+                    }
+                }
+
+                // Process creditor's outgoing transactions (expenses)
+                for (const txn of creditorTxns.outgoing) {
+                    if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
+                        creditorContributions.push({
+                            note: txn.note,
+                            amount: txn.amount,
+                            recordOwner: "creditor"
+                        });
+                    }
+                }
+
+                // Process creditor's incoming transactions (income)
+                for (const txn of creditorTxns.incoming) {
+                    if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
+                        creditorContributions.push({
+                            note: txn.note,
+                            amount: -txn.amount, // Negative for incoming
+                            recordOwner: "creditor"
+                        });
+                    }
+                }
+
+                // Create summary record with simple transaction list
                 await SummaryGroupTransaction.create({
                     user_id: debtorId,             // Person who needs to pay
                     space_id: groupSpace.space_id,
                     target_id: creditorId,         // Person who receives payment
                     transaction_ids: {
-                        debtor: debtorTransactionIds,
-                        creditor: creditorTransactionIds
+                        // Include regular transaction IDs for compatibility
+                        debtor: expenseTransactionMap.get(debtorId) || [],
+                        creditor: incomeTransactionMap.get(creditorId) || [],
+                        // Add paid/owed info for transparency
+                        paid: {
+                            debtor: paidAmounts.get(debtorId) || 0,
+                            creditor: paidAmounts.get(creditorId) || 0
+                        },
+                        owed: {
+                            debtor: owedAmounts.get(debtorId) || 0,
+                            creditor: owedAmounts.get(creditorId) || 0
+                        },
+                        // Only include split transactions with record owner
+                        contributions: {
+                            debtor: debtorContributions,
+                            creditor: creditorContributions
+                        }
                     },
                     description: `Payment for group: ${groupSpace.name}`,
                     amount: amountToTransfer
                 });
-                
+
                 // Update balances
                 debtors[debtorIndex][1] += amountToTransfer;
                 creditors[creditorIndex][1] -= amountToTransfer;
-                
-                // Check if balance settled to zero and mark as paid if necessary
+
+                // Check if balance settled to zero and move to next user if necessary
                 if (Math.abs(debtors[debtorIndex][1]) < 0.01) {
-                    // Optional: Update the transaction to mark it as paid
-                    // Could implement this if you have transaction ID from the create operation
                     debtorIndex++;
                 }
-                
+
                 if (creditors[creditorIndex][1] < 0.01) {
                     creditorIndex++;
                 }
             }
         }
+
+        // Now also update the similar code in the part that handles users with zero balance
+        // Here's the modified version for that section:
+
+        // Handle cases where balances already equal zero (settled)
+        for (const [userId, balance] of balances.entries()) {
+            if (Math.abs(balance) < 0.01) { // Balance is effectively zero
+                const transactionIds = {
+                    debtor: expenseTransactionMap.get(userId) || [],
+                    creditor: incomeTransactionMap.get(userId) || []
+                };
+
+                const userTxns = userTransactions.get(userId);
+
+                if (userTxns && (userTxns.outgoing.length > 0 || userTxns.incoming.length > 0)) {
+                    // Collect only split transactions with record owner
+                    const userContributions = [];
+
+                    // Process user's outgoing transactions (expenses)
+                    for (const txn of userTxns.outgoing) {
+                        if (txn.note.includes("Split from Group") || txn.note.includes("Split:")) {
+                            userContributions.push({
+                                note: txn.note,
+                                amount: txn.amount,
+                                recordOwner: "self"
+                            });
+                        }
+                    }
+
+                    // Process user's incoming transactions (income)
+                    for (const txn of userTxns.incoming) {
+                        if (txn.note.includes("Received split from") || txn.note.includes("Split receive from")) {
+                            userContributions.push({
+                                note: txn.note,
+                                amount: -txn.amount, // Negative for incoming
+                                recordOwner: "self"
+                            });
+                        }
+                    }
+
+                    // Create a self-transaction that's already marked as paid
+                    await SummaryGroupTransaction.create({
+                        user_id: userId,
+                        space_id: groupSpace.space_id,
+                        target_id: userId, // Self-transaction since balance is already settled
+                        transaction_ids: {
+                            // Keep original IDs for backward compatibility
+                            debtor: transactionIds.debtor,
+                            creditor: transactionIds.creditor,
+                            // Add paid/owed info for transparency
+                            paid: paidAmounts.get(userId) || 0,
+                            owed: owedAmounts.get(userId) || 0,
+                            // Only include split transactions with record owner
+                            contributions: {
+                                self: userContributions
+                            }
+                        },
+                        description: `Settled balance for group: ${groupSpace.name}`,
+                        amount: 0 // Net amount is zero
+                    });
+                }
+            }
+        }
+
         // Mark group as closed
         groupSpace.isClosed = true;
         await groupSpace.save();

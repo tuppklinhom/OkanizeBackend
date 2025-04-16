@@ -22,7 +22,7 @@ export class SchedulerService {
    */
   static scheduleEndOfMonthSummary(): void {
     // Cron pattern: '0 20 L * *' = At 8:00 PM on the last day of each month, now using every end of day
-    cron.schedule('0 20 * * *', async () => {
+    cron.schedule('0 20 1 * *', async () => {
       console.log('Running monthly summary job at', new Date().toISOString());
       try {
         // Get all active users
