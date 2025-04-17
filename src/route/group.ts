@@ -497,7 +497,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
 
         // calculate the summary of each member
         calculateNetAmounts(paymentTracker).forEach(async (record) => {
-            const isPaid = (record.amount = 0) ? true : false;
+            const isPaid = (parseFloat(record.amount as unknown as string) == 0) ? true : false;
             await SummaryGroupTransaction.create({
                 space_id: groupSpace.space_id,
                 user_id: record.debtorId,
