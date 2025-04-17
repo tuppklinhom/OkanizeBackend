@@ -116,11 +116,6 @@ function calculateNetAmounts(paymentTracker: Map<number, { creditor: number; amo
     });
     
     // Filter out any entries with zero net amount
-    netTracker.forEach((record, key) => {
-      if (record.amount === 0) {
-        netTracker.delete(key);
-      }
-    });
     
     return netTracker;
 }
@@ -501,6 +496,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
 
         // calculate the summary of each member
         calculateNetAmounts(paymentTracker).forEach(async (record) => {
+            const isPaid = (record.amount = 0) ? true : false;
             await SummaryGroupTransaction.create({
                 space_id: groupSpace.space_id,
                 user_id: record.debtorId,
@@ -508,7 +504,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 amount: record.amount,
                 transaction_ids: record.transactions,
                 description: `รายจ่ายกลุ่ม ${groupSpace.name}`,
-                is_paid: false
+                is_paid: isPaid
             });
         })
         // Mark group as closed
