@@ -444,7 +444,8 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         amount: eachMemberAmount,
                         date: currentTransaction.date,
                         type: 'Expense',
-                        note: `Split from Group: ${groupTransaction.description}`
+                        note: `Split from Group: ${groupTransaction.description}`,
+                        is_paid: true
                     });
 
                     const paymentRecord = paymentTracker.get(member.user_id) || []; // Get existing array or create empty one if it doesn't exist
@@ -474,7 +475,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                         date: currentTransaction.date,
                         type: 'Expense',
                         note: `Split from group: ${groupTransaction.description}`,
-                        is_paid: false
+                        is_paid: true
                     });
 
                     const paymentRecord = paymentTracker.get(userObj.user_id) || []; 
