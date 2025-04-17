@@ -365,124 +365,13 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
         // Enrich the summary transactions with user information and transaction details
         let enrichedSummaryTransactions = await Promise.all(summaryTransactions.map(async (summary) => {
             // Get debtor information
-            const debtor = await User.findOne({ 
-                where: { user_id: summary.user_id },
-                attributes: ['user_id', 'username', 'profile_image_base64'] 
-            });
-            
+            const debtor = await User.findOne({ where: { user_id: summary.user_id } });
             // Get creditor information
-            const creditor = await User.findOne({ 
-                where: { user_id: summary.target_id },
-                attributes: ['user_id', 'username', 'profile_image_base64']
-            });
+            const creditor = await User.findOne({ where: { user_id: summary.target_id } });
             
-            // Process transaction IDs based on new structure
-            const transactionData = summary.transaction_ids as any;
-            let isPaid = false;
-            let role;
-            let settlementTransactions = [];
-            let contributionsList = [];
+            const role = summary.user_id === userId ? 'debtor' : 'creditor';
             
-            // Extract paid and owed amounts if available
-            const paidOwedInfo = transactionData.paid && transactionData.owed ? {
-                paid: transactionData.paid,
-                owed: transactionData.owed
-            } : null;
-            
-            // Handle new contributions format
-            if (transactionData.contributions) {
-                if (userId === summary.user_id) {
-                    // This user is the debtor - show debtor's perspective
-                    contributionsList = Array.isArray(transactionData.contributions) 
-                        ? transactionData.contributions
-                        : (transactionData.contributions.debtor || []);
-                    role = 'debtor';
-                } else if (userId === summary.target_id) {
-                    // This user is the creditor - show creditor's perspective
-                    contributionsList = Array.isArray(transactionData.contributions)
-                        ? transactionData.contributions
-                        : (transactionData.contributions.debtor || []);
-                    role = 'creditor';
-                }
-            }
-            
-            // Handle backward compatibility for old settlement format
-            if (transactionData.settlement) {
-                // New format with explicit settlement transactions
-                const { debtorTransactionId, creditorTransactionId } = transactionData.settlement;
-                
-                // Fetch settlement transactions
-                if (debtorTransactionId) {
-                    const debtorSettlement = await Transaction.findByPk(debtorTransactionId);
-                    if (debtorSettlement) {
-                        settlementTransactions.push({
-                            id: debtorSettlement.transaction_id,
-                            amount: debtorSettlement.amount,
-                            date: debtorSettlement.date,
-                            note: debtorSettlement.note,
-                            isPaid: debtorSettlement.is_paid,
-                            type: 'debtor'
-                        });
-                        
-                        // Check payment status if this user is the debtor
-                        if (userId === summary.user_id) {
-                            isPaid = debtorSettlement.is_paid;
-                        }
-                    }
-                }
-                
-                if (creditorTransactionId) {
-                    const creditorSettlement = await Transaction.findByPk(creditorTransactionId);
-                    if (creditorSettlement) {
-                        settlementTransactions.push({
-                            id: creditorSettlement.transaction_id,
-                            amount: creditorSettlement.amount,
-                            date: creditorSettlement.date,
-                            note: creditorSettlement.note,
-                            isPaid: creditorSettlement.is_paid,
-                            type: 'creditor'
-                        });
-                        
-                        // Check payment status if this user is the creditor
-                        if (userId === summary.target_id) {
-                            isPaid = creditorSettlement.is_paid;
-                        }
-                    }
-                }
-            }
-            // Handle backward compatibility for old debtor/creditor format
-            else if (transactionData.debtor || transactionData.creditor) {
-                let relevantTransactionIds: number[] = [];
-                
-                if (userId === summary.user_id) {
-                    // User is the debtor
-                    role = 'debtor';
-                    relevantTransactionIds = transactionData.debtor || [];
-                } else if (userId === summary.target_id) {
-                    // User is the creditor
-                    role = 'creditor';
-                    relevantTransactionIds = transactionData.creditor || [];
-                }
-                
-                // Check transactions for payment status
-                if (relevantTransactionIds.length > 0) {
-                    const transactions = await Transaction.findAll({
-                        where: { transaction_id: { [Op.in]: relevantTransactionIds } }
-                    });
-                    
-                    // Consider it paid if all transactions are marked as paid
-                    isPaid = transactions.length > 0 && transactions.every(t => t.is_paid);
-                }
-            }
-            
-            // If no payment status determined yet, default to false
-            if (role === undefined) {
-                if (userId === summary.user_id) {
-                    role = 'debtor';
-                } else if (userId === summary.target_id) {
-                    role = 'creditor';
-                }
-            }
+            const contributionsList = summary.transaction_ids
 
             const createdDate = new Date(summary.createdAt);
             const currentDate = new Date();
@@ -492,10 +381,10 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             return {
                 id: summary.id,
                 description: summary.description,
-                amount: contributionsList.reduce((sum: any, item: any) => sum + parseFloat(item.amount), 0),
-                status: isPaid ? 'Paid' : 'Pending',
+                amount: summary.amount,
+                status: summary.is_paid ? 'Paid' : 'Unpaid',
                 ageInMonths: ageInMonths,
-                isPaid: isPaid,
+                isPaid: summary.is_paid,
                 role: role,
                 createdAt: summary.createdAt,
                 debtor: {
@@ -508,8 +397,6 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                     username: creditor?.username,
                     profile: creditor?.profile_image_base64
                 },
-                // Include paid/owed information if available
-                paidOwed: paidOwedInfo,
                 // Include contributions in user-friendly format
                 contributions: contributionsList,
                 // Keep settlement transactions for backward compatibility
@@ -564,133 +451,10 @@ router.post('/summary/mark_paid', KeyPair.requireAuth(), async (req, res, next):
             return res.status(403).json({ message: 'Unauthorized to update this summary' });
         }
 
-        // Get the transaction data
-        const transactionData = summary.transaction_ids as any;
-        let transactionIdToUpdate = null;
-        let transactionsUpdated = false;
-        let updatedTransactions: any = [];
-
-        // Handle different transaction structures
-
-        // 1. New format with explicit settlement transactions
-        if (transactionData.settlement) {
-            if (isDebtor && transactionData.settlement.debtorTransactionId) {
-                // If user is debtor, update their expense transaction
-                transactionIdToUpdate = transactionData.settlement.debtorTransactionId;
-                await Transaction.update(
-                    { is_paid: true },
-                    { where: { transaction_id: transactionIdToUpdate } }
-                );
-                transactionsUpdated = true;
-
-                const transaction = await Transaction.findByPk(transactionIdToUpdate);
-                if (transaction) {
-                    updatedTransactions.push({
-                        id: transaction.transaction_id,
-                        amount: transaction.amount,
-                        note: transaction.note,
-                        date: transaction.date,
-                        isPaid: transaction.is_paid
-                    });
-                }
-            } else if (isCreditor && transactionData.settlement.creditorTransactionId) {
-                // If user is creditor, update their income transaction
-                transactionIdToUpdate = transactionData.settlement.creditorTransactionId;
-                await Transaction.update(
-                    { is_paid: true },
-                    { where: { transaction_id: transactionIdToUpdate } }
-                );
-                transactionsUpdated = true;
-
-                const transaction = await Transaction.findByPk(transactionIdToUpdate);
-                if (transaction) {
-                    updatedTransactions.push({
-                        id: transaction.transaction_id,
-                        amount: transaction.amount,
-                        note: transaction.note,
-                        date: transaction.date,
-                        isPaid: transaction.is_paid
-                    });
-                }
-            }
-        }
-        // 2. Old format with debtor/creditor transaction arrays
-        else if (transactionData.debtor || transactionData.creditor) {
-            let relevantTransactionIds = [];
-            
-            if (isDebtor && transactionData.debtor) {
-                // If user is debtor, update their expense transactions
-                relevantTransactionIds = transactionData.debtor || [];
-            } else if (isCreditor && transactionData.creditor) {
-                // If user is creditor, update their income transactions
-                relevantTransactionIds = transactionData.creditor || [];
-            }
-            
-            if (relevantTransactionIds.length > 0) {
-                // Update all relevant transactions
-                await Transaction.update(
-                    { is_paid: true },
-                    { where: { transaction_id: { [Op.in]: relevantTransactionIds } } }
-                );
-                transactionsUpdated = true;
-                
-                // Get the updated transactions
-                const transactions = await Transaction.findAll({
-                    where: { transaction_id: { [Op.in]: relevantTransactionIds } }
-                });
-                
-                updatedTransactions = transactions.map(t => ({
-                    id: t.transaction_id,
-                    amount: t.amount,
-                    note: t.note,
-                    date: t.date,
-                    isPaid: t.is_paid
-                }));
-            }
-        }
-        // 3. No transactions to update (e.g., using the new contributions-only format)
-        else {
-            // For the new format without settlement transactions, we'll create a memo transaction
-            // to track the payment status
-            const userObj = await User.findByPk(userId);
-            if (!userObj) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-            
-            // Create a memo transaction to track payment
-            const memoTransaction = await Transaction.create({
-                wallet_id: userObj.default_wallet,
-                category_id: userObj.default_category,
-                amount: summary.amount,
-                date: new Date(),
-                type: isDebtor ? 'Expense' : 'Income',
-                note: `Memo: ${isDebtor ? 'Paid to' : 'Received from'} ${isDebtor ? 'creditor' : 'debtor'} for group: ${summary.description}`,
-                is_paid: true
-            });
-            
-            // Update the summary transaction to include this memo transaction
-            const updatedTransactionIds = { ...transactionData };
-            if (!updatedTransactionIds.settlement) {
-                updatedTransactionIds.settlement = {};
-            }
-            
-            if (isDebtor) {
-                updatedTransactionIds.settlement.debtorTransactionId = memoTransaction.transaction_id;
-            } else {
-                updatedTransactionIds.settlement.creditorTransactionId = memoTransaction.transaction_id;
-            }
-            
-            await summary.update({ transaction_ids: updatedTransactionIds });
-            transactionsUpdated = true;
-            
-            updatedTransactions.push({
-                id: memoTransaction.transaction_id,
-                amount: memoTransaction.amount,
-                note: memoTransaction.note,
-                date: memoTransaction.date,
-                isPaid: memoTransaction.is_paid
-            });
-        }
+        const transactionsUpdated = await SummaryGroupTransaction.update(
+            { is_paid: true },  // Mark the summary as paid 
+            { where: { id: summaryId } }
+        );
         
         if (!transactionsUpdated) {
             return res.status(400).json({ message: 'No transactions could be updated' });
@@ -699,8 +463,7 @@ router.post('/summary/mark_paid', KeyPair.requireAuth(), async (req, res, next):
         return res.status(200).json({
             message: `${isDebtor ? 'Debt' : 'Payment'} marked as paid successfully`,
             summaryId: summary.id,
-            userRole: isDebtor ? 'debtor' : 'creditor',
-            updatedTransactions: updatedTransactions
+            userRole: isDebtor ? 'debtor' : 'creditor'
         });
     } catch (error) {
         console.error(error);
