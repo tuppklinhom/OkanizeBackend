@@ -382,9 +382,8 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                 id: summary.id,
                 description: summary.description,
                 amount: summary.amount,
-                status: summary.is_paid ? 'Paid' : 'Unpaid',
                 ageInMonths: ageInMonths,
-                isPaid: summary.is_paid,
+                isPaid: role === 'debtor' ? summary.is_paid_debtor : summary.is_paid_creditor,
                 role: role,
                 createdAt: summary.createdAt,
                 debtor: {
@@ -451,10 +450,18 @@ router.post('/summary/mark_paid', KeyPair.requireAuth(), async (req, res, next):
             return res.status(403).json({ message: 'Unauthorized to update this summary' });
         }
 
-        const transactionsUpdated = await SummaryGroupTransaction.update(
-            { is_paid: true },  // Mark the summary as paid 
-            { where: { id: summaryId } }
-        );
+        let transactionsUpdated
+        if (isDebtor){
+            transactionsUpdated = await SummaryGroupTransaction.update(
+                { is_paid_debtor: true },  // Mark the summary as paid 
+                { where: { id: summaryId } }
+            );
+        }else if (isCreditor){
+            transactionsUpdated = await SummaryGroupTransaction.update(
+                { is_paid_creditor: true },  // Mark the summary as paid 
+                { where: { id: summaryId } }
+            );
+        }
         
         if (!transactionsUpdated) {
             return res.status(400).json({ message: 'No transactions could be updated' });

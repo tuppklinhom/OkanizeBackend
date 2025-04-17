@@ -510,7 +510,8 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
                 amount: record.amount,
                 transaction_ids: record.transactions,
                 description: `รายจ่ายกลุ่ม ${groupSpace.name}`,
-                is_paid: isPaid
+                is_paid_debtor: isPaid,
+                is_paid_creditor: isPaid,
             });
         })
         // Mark group as closed
