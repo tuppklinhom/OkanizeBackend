@@ -33,6 +33,11 @@ function calculateNetAmounts(paymentTracker: Map<number, { creditor: number; amo
         const amount = transaction.amount;
         const name = transaction.name;
         const transactionId = transaction.transactionIds;
+
+            // Skip self-payments
+        if (debtorId === creditorId) {
+            return; // Skip this transaction
+        }
         
         // Determine the key - always store with smaller ID first for consistency
         const key = `${debtorId}-${creditorId}`;
@@ -497,7 +502,7 @@ router.post('/confirm', KeyPair.requireAuth(), async (req, res, next): Promise<a
 
         // calculate the summary of each member
         calculateNetAmounts(paymentTracker).forEach(async (record) => {
-            const isPaid = (record.amount = 0) ? true : false;
+            const isPaid = parseFloat(String(record.amount)) === 0;
             await SummaryGroupTransaction.create({
                 space_id: groupSpace.space_id,
                 user_id: record.debtorId,
