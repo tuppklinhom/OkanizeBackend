@@ -15,6 +15,7 @@ export class SummaryGroupTransaction extends Model<InferAttributes<SummaryGroupT
     declare transaction_ids: object;
     declare description: string;
     declare amount: number
+    declare is_paid: boolean;
     declare createdAt: CreationOptional<Date>;
 }
 
@@ -48,6 +49,10 @@ SummaryGroupTransaction.init(
         amount: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
+        },
+        is_paid: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
         },
         createdAt: {
             type: DataTypes.DATE,
