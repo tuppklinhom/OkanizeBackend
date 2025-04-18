@@ -341,8 +341,9 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
 
             // Query by user's role in the transactions
             let whereClause = {} as WhereOptions
-            
-            if (asDebtor === true && asCreditor === true) {
+            if (spaceId && isSpaceAdmin) {
+                whereClause = { space_id: spaceId };
+            } else if (asDebtor === true && asCreditor === true) {
                 // User wants to see transactions where they are either debtor or creditor
                 whereClause = {
                     [Op.or]: [
