@@ -147,7 +147,7 @@ router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<an
         const group = await GroupSpace.create({
             name: groupName,
             description: groupDescription,
-            isClosed: false
+            isClosed: false,
         });
 
         await GroupMember.create({
@@ -181,13 +181,6 @@ router.post('/create', KeyPair.requireAuth(), async (req, res, next): Promise<an
     }
 })
 
-router.post('/invite', (req, res) => {
-
-})
-
-router.post('/accept', (req, res) => {
-
-})
 
 router.get('/query', KeyPair.requireAuth() ,async (req, res, next): Promise<any> => {
     try{
@@ -218,7 +211,20 @@ router.get('/query', KeyPair.requireAuth() ,async (req, res, next): Promise<any>
             if (!groupObj) {
                 return null
             }
-            return {groupID: groupObj.space_id , groupName: groupObj.name, groupDescription: groupObj.description, groupMember: groupMembers, groupStatus: groupObj.isClosed? "Closed":"Active"};
+            let groupStatus = groupObj.isClosed ? "Closed" : "Active"
+            const transactions = await SummaryGroupTransaction.findAll({
+                where: { space_id: group.space_id }
+            });
+            
+            // Check if any transaction has either creditor or debtor payment not completed
+            const hasUnpaidTransactions = transactions.some(
+                transaction => !transaction.is_paid_creditor || !transaction.is_paid_debtor
+            );
+            
+            // Set status to "pending" if there are unpaid transactions, otherwise use the group's actual status
+            const effectiveStatus = hasUnpaidTransactions ? "Pending" : groupStatus;
+            
+            return {groupID: groupObj.space_id , groupName: groupObj.name, groupDescription: groupObj.description, groupMember: groupMembers, groupStatus: effectiveStatus};
         }))
 
 

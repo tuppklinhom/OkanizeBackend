@@ -12,6 +12,7 @@ import { TransactionServices } from '../module/TransactionServices';
 import { Category } from '../model/Category';
 import { SummaryGroupTransaction } from '../model/SummaryGroupTransaction';
 import { CategoryCount } from '../model/CategoryCount';
+import { GroupMember } from '../model/GroupMember';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -324,6 +325,20 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
             summaryTransactions.push(summary);
         }
         else {
+            let isSpaceAdmin = false;
+            if (spaceId) {
+              // Query to check if user is admin for this space
+              const userSpaceRole = await GroupMember.findOne({
+                where: {
+                  user_id: userId,
+                  space_id: spaceId,
+                  role: 'Admin' // Assuming 'admin' is the role value for admins
+                }
+              });
+              
+              isSpaceAdmin = !!userSpaceRole; // Convert to boolean
+            }
+
             // Query by user's role in the transactions
             let whereClause = {} as WhereOptions
             
