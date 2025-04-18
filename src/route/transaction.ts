@@ -404,12 +404,14 @@ router.post('/summary/query', KeyPair.requireAuth(), async (req, res, next): Pro
                 debtor: {
                     id: debtor?.user_id,
                     username: debtor?.username,
-                    profile: debtor?.profile_image_base64
+                    profile: debtor?.profile_image_base64,
+                    is_paid: summary.is_paid_debtor
                 },
                 creditor: {
                     id: creditor?.user_id,
                     username: creditor?.username,
-                    profile: creditor?.profile_image_base64
+                    profile: creditor?.profile_image_base64,
+                    is_paid: summary.is_paid_creditor
                 },
                 // Include contributions in user-friendly format
                 contributions: contributionsList,
